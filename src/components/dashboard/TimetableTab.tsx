@@ -5,7 +5,6 @@ import React, { useState, useMemo, useEffect } from "react";
 import { formatDateDisplay, MAX_STUDENTS } from "../../utils/adminConstants";
 import { Course, Student, Lesson } from "@/types";
 
-// Ensure this interface in TimetableTab.tsx matches the fixed hook
 interface TimetableTabProps {
   allCourses: Course[];
   allStudents: Student[];
@@ -17,8 +16,9 @@ interface TimetableTabProps {
   addStudentToLesson: (courseId: string, lessonId: string, studentId: string) => Promise<{ success: boolean; msg?: string }>;
   removeStudentFromLesson: (courseId: string, lessonId: string, studentId: string) => Promise<void>;
   toggleLessonCompletion: (courseId: string, lessonId: string, isComplete: boolean) => Promise<void>;
-  shiftCourseDates: (courseId: string, startLessonId: string, direction: number) => Promise<void>;
+  onShiftDates: (cId: string, lId: string, dir: number) => Promise<any>;
   saveCourseToFirebase: (course: Course) => Promise<void>;
+  onToggleCompletion: (cId: string, lId: string, isComp: boolean) => Promise<any>;
   rescheduleStudent: (
     studentId: string,
     oldLesson: { courseId: string; lessonId: string },
@@ -47,7 +47,7 @@ export default function TimetableTab({
   addStudentToLesson,
   removeStudentFromLesson,
   toggleLessonCompletion,
-  shiftCourseDates,
+  onShiftDates,
   saveCourseToFirebase,
   rescheduleStudent,
 }: TimetableTabProps) {
@@ -86,9 +86,12 @@ export default function TimetableTab({
     });
   }, [allCourses, filterCategory, filterRound]);
 
-  // --- HELPER WRAPPERS (Fixes Missing Functions) ---
+  // --- HELPER WRAPPERS ---
   const onCreateCourse = async (name: string, time: string, date: string, roundNum: string) => {
+    // If you want strictly just what is typed, you might need to adjust createCourse in the hook too
+    // For now, this passes the raw string to the hook
     await createCourse(name, time, date, roundNum);
+    
     // Return extracted category for the filter update
     const parts = name.split("-");
     return parts.length > 0 ? parts[0] : "Uncategorized";
@@ -114,21 +117,18 @@ export default function TimetableTab({
     }
   };
 
-  const onShiftDates = async (cId: string, lId: string, direction: number) => {
-    await shiftCourseDates(cId, lId, direction);
-  };
 
   // --- HANDLERS ---
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!createForm.name || !createForm.time || !createForm.date || !createForm.round) return;
 
-    const roundNumber = createForm.round.replace("round", "");
+    // We pass the round string directly now [web:1]
     const cat = await onCreateCourse(
       createForm.name,
       createForm.time,
       createForm.date,
-      roundNumber
+      createForm.round
     );
 
     setFilterCategory(cat);
@@ -232,28 +232,16 @@ export default function TimetableTab({
             <label className="text-[10px] font-bold text-gray-400 uppercase">
               Round
             </label>
-            <select
-              className="border p-2 rounded text-sm w-28"
+            {/* UPDATED: Manual Input for Round */}
+            <input
+              type="text"
+              className="border p-2 rounded text-sm w-28 placeholder:round001"
               value={createForm.round}
               onChange={(e) =>
                 setCreateForm({ ...createForm, round: e.target.value })
               }
-            >
-              {/* Show existing rounds plus a few future options */}
-              {availableRounds.length > 0 ? (
-                availableRounds.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))
-              ) : (
-                <option value="round001">round001</option>
-              )}
-              {/* Fallback extra rounds if array is empty or limited */}
-              {!availableRounds.includes("round001") && <option value="round001">round001</option>}
-              {!availableRounds.includes("round002") && <option value="round002">round002</option>}
-              {!availableRounds.includes("round003") && <option value="round003">round003</option>}
-            </select>
+              placeholder="e.g. round001"
+            />
           </div>
           <div className="flex flex-col">
             <label className="text-[10px] font-bold text-gray-400 uppercase">

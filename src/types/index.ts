@@ -1,5 +1,4 @@
 // src/types/index.ts
-
 import React from "react";
 
 export interface PersonalInfo {
@@ -54,6 +53,37 @@ export interface Course {
   lessons: Lesson[];
 }
 
+// --- NEW: Request Interface ---
+export interface LessonChangeRequest {
+  id: string; // Firebase Document ID
+  studentId: string;
+  studentName: string;
+  courseCode: string;
+  courseName: string;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  submitTime: string;
+  makeupOption: string;
+  
+  // The lesson they want to LEAVE
+  lesson: {
+    courseId: string;
+    dateStr: string;
+    id: number | string;
+    name: string;
+    timeSlot: string;
+  };
+  
+  // The lesson they want to JOIN
+  selectedTimeSlot: {
+    courseId: string;
+    date: string;
+    lessonId: string;
+    name: string;
+    time: string;
+  };
+}
+
 export interface AdminDataHook {
   allCourses: Course[];
   setAllCourses: React.Dispatch<React.SetStateAction<Course[]>>;
@@ -62,8 +92,15 @@ export interface AdminDataHook {
   loading: boolean;
   availableCategories: string[];
   availableRounds: string[];
-  
-  // Must return Promise<string> to satisfy TimetableTab
+
+  // --- NEW: Added Requests & Handler ---
+  requests: LessonChangeRequest[];
+  handleRequest: (
+    req: LessonChangeRequest, 
+    action: "approve" | "reject"
+  ) => Promise<void>;
+
+  // Existing Actions
   createCourse: (name: string, time: string, date: string, roundNum: string) => Promise<string>;
   
   deleteCourse: (courseId: string) => Promise<void>;
@@ -86,7 +123,6 @@ export interface AdminDataHook {
     isComplete: boolean
   ) => Promise<void>;
   
-  // Must have 3 arguments to match useAdminData implementation
   shiftCourseDates: (
     courseId: string, 
     startLessonId: string, 
