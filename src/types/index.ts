@@ -93,6 +93,7 @@ export interface AdminDataHook {
   availableCategories: string[];
   availableRounds: string[];
 
+<<<<<<< HEAD
   // --- NEW: Added Requests & Handler ---
   requests: LessonChangeRequest[];
   handleRequest: (
@@ -103,42 +104,129 @@ export interface AdminDataHook {
   // Existing Actions
   createCourse: (name: string, time: string, date: string, roundNum: string) => Promise<string>;
   
+=======
+  // Must return Promise<string> to satisfy TimetableTab
+  createCourse: (
+    name: string,
+    time: string,
+    date: string,
+    roundNum: string
+  ) => Promise<string>;
+
+>>>>>>> build-enrollment
   deleteCourse: (courseId: string) => Promise<void>;
-  
+
   addStudentToLesson: (
-    courseId: string, 
-    lessonId: string, 
+    courseId: string,
+    lessonId: string,
     studentId: string
   ) => Promise<{ success: boolean; msg?: string }>;
-  
+
   removeStudentFromLesson: (
-    courseId: string, 
-    lessonId: string, 
+    courseId: string,
+    lessonId: string,
     studentId: string
   ) => Promise<void>;
-  
+
   toggleLessonCompletion: (
-    courseId: string, 
-    lessonId: string, 
+    courseId: string,
+    lessonId: string,
     isComplete: boolean
   ) => Promise<void>;
+<<<<<<< HEAD
   
+=======
+
+  // Must have 3 arguments to match useAdminData implementation
+>>>>>>> build-enrollment
   shiftCourseDates: (
-    courseId: string, 
-    startLessonId: string, 
+    courseId: string,
+    startLessonId: string,
     direction: number
   ) => Promise<void>;
-  
+
   saveCourseToFirebase: (course: Course) => Promise<void>;
-  
+
   enrollStudentToCourse: (
-    courseId: string, 
+    courseId: string,
     studentId: string
   ) => Promise<{ success: boolean; msg?: string }>;
-  
+
   rescheduleStudent: (
     studentId: string,
     oldLesson: { courseId: string; lessonId: string },
-    newLesson: { courseId: string; lessonId: string; dateStr: string; timeSlot: string }
+    newLesson: {
+      courseId: string;
+      lessonId: string;
+      dateStr: string;
+      timeSlot: string;
+    }
   ) => Promise<{ success: boolean; msg?: string }>;
 }
+
+export interface Lesson {
+  name: string;
+  dateTime: string;
+}
+
+export interface FormDataType {
+  type?: "receipt" | "course_plan";
+  receiptNo?: string;
+  studentName: string;
+  studentCode: string;
+  gender: string;
+  parentContact: string;
+  issueDate: string;
+  courseCode: string;
+  lessons: Lesson[];
+  paymentMethod: string;
+  paymentDate: string;
+}
+
+export interface Tab {
+  id: string;
+  title: string;
+}
+
+export interface ReceiptTab extends Tab {
+  data: FormDataType;
+  savedFileId?: string;
+  zoom: number;
+  scrollTop: number;
+}
+
+export interface SavedFile {
+  id: string;
+  title: string;
+  lastModified: number;
+  data: FormDataType;
+}
+
+export const DEFAULT_LESSONS = Array(12).fill({ name: "", dateTime: "" });
+
+export const NEW_RECEIPT_TEMPLATE: FormDataType = {
+  type: "receipt",
+  receiptNo: "",
+  studentName: "",
+  studentCode: "",
+  gender: "",
+  parentContact: "",
+  issueDate: new Date().toISOString().split("T")[0],
+  courseCode: "",
+  lessons: DEFAULT_LESSONS,
+  paymentMethod: "",
+  paymentDate: "",
+};
+
+export const NEW_COURSE_PLAN_TEMPLATE: FormDataType = {
+  type: "course_plan",
+  studentName: "",
+  studentCode: "",
+  gender: "",
+  parentContact: "",
+  issueDate: new Date().toISOString().split("T")[0],
+  courseCode: "",
+  lessons: DEFAULT_LESSONS,
+  paymentMethod: "",
+  paymentDate: "",
+};
