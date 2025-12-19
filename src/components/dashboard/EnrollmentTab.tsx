@@ -9,7 +9,10 @@ import { Course, Student, PersonalInfo } from "@/types";
 interface EnrollmentTabProps {
   allCourses: Course[];
   setAllStudents: React.Dispatch<React.SetStateAction<Student[]>>;
-  enrollStudentToCourse: (courseId: string, studentId: string) => Promise<{ success: boolean; msg?: string }>;
+  enrollStudentToCourse: (
+    courseId: string,
+    studentId: string
+  ) => Promise<{ success: boolean; msg?: string }>;
 }
 
 export default function EnrollmentTab({
@@ -92,7 +95,7 @@ export default function EnrollmentTab({
           personalInfo: newPersonalInfo,
           enrollment: [],
         };
-        
+
         await setDoc(studentRef, newStudent);
 
         // Optimistically add to local list
@@ -103,7 +106,9 @@ export default function EnrollmentTab({
       const result = await enrollStudentToCourse(enrollCourse, enrollId);
 
       if (result.success) {
-        setEnrollmentStatus(`Success! ${enrollName} enrolled in ${enrollCourse}.`);
+        setEnrollmentStatus(
+          `Success! ${enrollName} enrolled in ${enrollCourse}.`
+        );
         // Reset Form
         setEnrollId("");
         setEnrollName("");
@@ -127,19 +132,22 @@ export default function EnrollmentTab({
 
   // Return JSX (truncated for brevity, logic remains identical)
   return (
-    <div className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-md">
+    <div className="p-8">
       <h2 className="text-2xl font-bold mb-6 text-gray-800 border-b pb-2">
-        New Student Enrollment
+        Enroll New Student
       </h2>
 
       <form onSubmit={handleEnrollStudent} className="space-y-6">
-        
         {/* SECTION 1: IDENTITY */}
-        <div className="bg-gray-50 p-4 rounded-md border border-gray-100">
-          <h3 className="text-md font-semibold text-blue-800 mb-3">Student Identity</h3>
+        <div>
+          <h3 className="text-md font-semibold text-sky-950 mb-3">
+            Student Identity
+          </h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Student ID *</label>
+              <label className="block text-sm font-medium text-gray-700">
+                Student ID *
+              </label>
               <input
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                 value={enrollId}
@@ -149,7 +157,9 @@ export default function EnrollmentTab({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">English Name *</label>
+              <label className="block text-sm font-medium text-gray-700">
+                English Name *
+              </label>
               <input
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                 value={enrollName}
@@ -159,7 +169,9 @@ export default function EnrollmentTab({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Chinese Name</label>
+              <label className="block text-sm font-medium text-gray-700">
+                Chinese Name
+              </label>
               <input
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                 value={enrollChiName}
@@ -170,8 +182,10 @@ export default function EnrollmentTab({
           </div>
 
           <div className="grid grid-cols-3 md:grid-cols-3 gap-4 mt-4">
-             <div>
-              <label className="block text-sm font-medium text-gray-700">Gender</label>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Gender
+              </label>
               <select
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                 value={enrollSex}
@@ -182,7 +196,9 @@ export default function EnrollmentTab({
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Level</label>
+              <label className="block text-sm font-medium text-gray-700">
+                Level
+              </label>
               <select
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                 value={enrollLevel}
@@ -194,8 +210,10 @@ export default function EnrollmentTab({
                 <option value="P1">P1</option>
               </select>
             </div>
-             <div>
-              <label className="block text-sm font-medium text-gray-700">Language</label>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Language
+              </label>
               <select
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                 value={enrollLang}
@@ -210,11 +228,15 @@ export default function EnrollmentTab({
         </div>
 
         {/* SECTION 2: PERSONAL & MEDICAL */}
-        <div className="bg-gray-50 p-4 rounded-md border border-gray-100">
-          <h3 className="text-md font-semibold text-blue-800 mb-3">Personal & Medical Details</h3>
+        <div>
+          <h3 className="text-md font-semibold text-sky-950 mb-3">
+            Personal & Medical Details
+          </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700">Allergies</label>
+              <label className="block text-sm font-medium text-gray-700">
+                Allergies
+              </label>
               <input
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                 value={enrollAllergies}
@@ -223,7 +245,9 @@ export default function EnrollmentTab({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Special Conditions</label>
+              <label className="block text-sm font-medium text-gray-700">
+                Special Conditions
+              </label>
               <input
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                 value={enrollCondition}
@@ -232,7 +256,9 @@ export default function EnrollmentTab({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Favorite Character</label>
+              <label className="block text-sm font-medium text-gray-700">
+                Favorite Character
+              </label>
               <input
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                 value={enrollFavChar}
@@ -241,7 +267,9 @@ export default function EnrollmentTab({
               />
             </div>
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700">Comfort Method</label>
+              <label className="block text-sm font-medium text-gray-700">
+                Comfort Method
+              </label>
               <input
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                 value={enrollComfort}
@@ -253,11 +281,15 @@ export default function EnrollmentTab({
         </div>
 
         {/* SECTION 3: PARENT INFO */}
-        <div className="bg-gray-50 p-4 rounded-md border border-gray-100">
-          <h3 className="text-md font-semibold text-blue-800 mb-3">Parent / Guardian Information</h3>
+        <div>
+          <h3 className="text-md font-semibold text-sky-950 mb-3">
+            Parent / Guardian Information
+          </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">Parent Name</label>
+              <label className="block text-sm font-medium text-gray-700">
+                Parent Name
+              </label>
               <input
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                 value={enrollParentName}
@@ -266,7 +298,9 @@ export default function EnrollmentTab({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">Contact Number</label>
+              <label className="block text-sm font-medium text-gray-700">
+                Contact Number
+              </label>
               <input
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                 value={enrollParentContact}
@@ -279,12 +313,16 @@ export default function EnrollmentTab({
 
         {/* SECTION 4: COURSE SELECTION */}
         <div className="border-t pt-4 mt-2">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">Select Course</h3>
+          <h3 className="text-lg font-bold text-gray-900 mb-4">
+            Select Course
+          </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Course Name</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Course Name
+              </label>
               <select
-                className="block w-full border border-gray-300 rounded-md p-3 focus:ring-blue-500 focus:border-blue-500"
+                className="block w-full border border-gray-300 rounded-md p-3 focus:ring-sky-500 focus:border-sky-500"
                 value={enrollCourse}
                 onChange={(e) => {
                   setEnrollCourse(e.target.value);
@@ -301,9 +339,11 @@ export default function EnrollmentTab({
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Round / Iteration</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Round / Iteration
+              </label>
               <select
-                className="block w-full border border-gray-300 rounded-md p-3 focus:ring-blue-500 focus:border-blue-500"
+                className="block w-full border border-gray-300 rounded-md p-3 focus:ring-sky-500 focus:border-sky-500"
                 value={enrollRound}
                 onChange={(e) => setEnrollRound(e.target.value)}
                 required
@@ -323,7 +363,7 @@ export default function EnrollmentTab({
         {/* SUBMIT BUTTON */}
         <button
           type="submit"
-          className="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded hover:bg-blue-700 transition duration-150 ease-in-out shadow-lg mt-4"
+          className="w-full bg-sky-950 text-white font-bold py-3 px-4 rounded-lg hover:opacity-85 transition duration-150 ease-in-out mt-4 cursor-pointer"
         >
           Enroll Student
         </button>
