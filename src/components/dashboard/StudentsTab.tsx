@@ -1,14 +1,21 @@
 // src/components/dashboard/StudentsTab.tsx
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useMemo, useState } from "react";
+import {
+  Search,
+  Users,
+  CalendarClock,
+  CheckCircle2,
+  Clock3,
+} from "lucide-react";
 import { Student, Course, StudentLesson } from "@/types";
 
 interface StudentsTabProps {
   allStudents: Student[];
   allCourses: Course[];
   setAllStudents: React.Dispatch<React.SetStateAction<Student[]>>;
-  onCourseSave?: (course: Course) => void; // Optional based on original
+  onCourseSave?: (course: Course) => void;
   rescheduleStudent: (
     studentId: string,
     oldLesson: { courseId: string; lessonId: string },
@@ -39,28 +46,90 @@ interface RescheduleOption {
   path: any;
 }
 
+const cx = (...classes: Array<string | false | null | undefined>) =>
+  classes.filter(Boolean).join(" ");
+
+function Chip({
+  children,
+  className = "",
+  title,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  title?: string;
+}) {
+  return (
+    <span
+      title={title}
+      className={cx(
+        "inline-flex items-center rounded-lg px-2 py-0.5 text-[11px] font-semibold",
+        className
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function IconInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <div className="relative">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="h-10 w-full rounded-lg border border-gray-200 bg-white/70 pl-9 pr-3 text-sm outline-none transition focus:ring-2 focus:ring-blue-500/15 focus:border-blue-500"
+      />
+    </div>
+  );
+}
+
+function EmptyState({ title, subtitle }: { title: string; subtitle: string }) {
+  return (
+    <div className="h-full grid place-items-center">
+      <div className="text-center py-16 text-gray-400">
+        <Users className="h-12 w-12 mx-auto mb-3 opacity-20" />
+        <p className="text-sm font-medium text-gray-500">{title}</p>
+        <p className="text-xs text-gray-400 mt-1">{subtitle}</p>
+      </div>
+    </div>
+  );
+}
+
 export default function StudentsTab({
   allStudents,
   allCourses,
   setAllStudents,
-  onCourseSave,
+  onCourseSave, // kept for compatibility
   rescheduleStudent,
 }: StudentsTabProps) {
   const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
   const [studentSearch, setStudentSearch] = useState<string>("");
+
   const [reschedulingLesson, setReschedulingLesson] = useState<{
     student: Student;
     lesson: StudentLesson;
     options: RescheduleOption[];
   } | null>(null);
 
-  const filteredStudents = allStudents.filter(
-    (s) =>
-      s.name.toLowerCase().includes(studentSearch.toLowerCase()) ||
-      s.id.toLowerCase().includes(studentSearch.toLowerCase())
-  );
+  const filteredStudents = useMemo(() => {
+    const q = studentSearch.trim().toLowerCase();
+    if (!q) return allStudents;
 
-  // --- DATA TRANSFORMATION ---
+    return allStudents.filter(
+      (s) => s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q)
+    );
+  }, [allStudents, studentSearch]);
+
   const viewingStudentEnrollmentGroups = useMemo<EnrollmentGroup[]>(() => {
     if (!viewingStudent || !viewingStudent.enrollment) return [];
 
@@ -85,7 +154,6 @@ export default function StudentsTab({
     );
   }, [viewingStudent, allCourses]);
 
-  // --- RESCHEDULE LOGIC ---
   const handleOpenReschedule = (
     student: Student,
     currentLesson: StudentLesson
@@ -95,8 +163,7 @@ export default function StudentsTab({
     allCourses.forEach((c) => {
       const matchingLesson = c.lessons.find(
         (l) => l.id === currentLesson.lessonId
-      ); // Note: using lessonId to match generic lesson index (1-12)
-
+      );
       if (matchingLesson) {
         options.push({
           courseId: c.id,
@@ -126,7 +193,7 @@ export default function StudentsTab({
 
     const oldLessonObj = {
       courseId: lesson.courseId,
-      lessonId: lesson.lessonId, // Use lessonId property
+      lessonId: lesson.lessonId,
     };
 
     const newLessonObj = {
@@ -140,158 +207,345 @@ export default function StudentsTab({
 
     if (res.success) {
       const updatedStudent = allStudents.find((s) => s.id === student.id);
-      if (updatedStudent) {
-        setViewingStudent(updatedStudent);
-      }
+      if (updatedStudent) setViewingStudent(updatedStudent);
     } else {
-      alert("Error: " + res.msg);
+      alert("Error: " + (res.msg || "Unknown error"));
     }
+
     setReschedulingLesson(null);
   };
 
-  // Return JSX (Use original JSX structure)
+  const selectedId = viewingStudent?.id ?? null;
+
   return (
-    <div className="flex gap-4 h-[calc(100vh-100px)]">
-      {/* LEFT: Student List */}
-      <div className="w-1/3 border-r pr-4 overflow-y-auto">
-        <input
-          className="w-full border p-2 rounded mb-4 placeholder:text-gray-400"
-          placeholder="Search students..."
-          value={studentSearch}
-          onChange={(e) => setStudentSearch(e.target.value)}
-        />
-        <table className="w-full text-sm text-left">
-          <thead className="sticky top-0 bg-white">
-            <tr className="border-b">
-              <th className="p-2">ID</th>
-              <th className="p-2">Name</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredStudents.map((s) => (
-              <tr
-                key={s.id}
-                className={`cursor-pointer hover:bg-blue-50 ${
-                  viewingStudent?.id === s.id ? "bg-blue-100" : ""
-                }`}
-                onClick={() => setViewingStudent(s)}
-              >
-                <td className="p-2 border-b">{s.id}</td>
-                <td className="p-2 border-b">{s.name}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="m-8 h-[calc(100vh-144px)] overflow-hidden flex rounded-xl border border-gray-200 bg-white shadow-sm">
+      {/* LEFT */}
+      <div className="w-[360px] shrink-0 border-r border-gray-200 bg-gray-50">
+        <div className="p-4">
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-sm font-semibold text-gray-900">Students</div>
+            <Chip className="bg-gray-100 text-gray-700" title="Total students">
+              {allStudents.length}
+            </Chip>
+          </div>
+
+          <div className="mt-3">
+            <IconInput
+              value={studentSearch}
+              onChange={setStudentSearch}
+              placeholder="Search name or ID…"
+            />
+          </div>
+        </div>
+
+        <div className="h-[calc(100%-88px)] overflow-auto">
+          {filteredStudents.length === 0 ? (
+            <div className="px-4 py-10 text-center text-gray-400">
+              <p className="text-sm">No students found</p>
+              <p className="text-xs mt-1">Try a different keyword.</p>
+            </div>
+          ) : (
+            <div className="px-2 pb-3 pt-1">
+              {filteredStudents.map((s) => {
+                const active = selectedId === s.id;
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() => setViewingStudent(s)}
+                    className={cx(
+                      "w-full text-left px-3 py-2 rounded-lg transition cursor-pointer",
+                      "hover:bg-white hover:shadow-sm hover:border hover:border-gray-200",
+                      "focus:outline-none focus:ring-2 focus:ring-blue-500/15",
+                      active && "bg-white shadow-sm border border-gray-200"
+                    )}
+                    title="View student"
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium text-gray-900 truncate">
+                          {s.name}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-0.5 font-mono">
+                          {s.id}
+                        </div>
+                      </div>
+
+                      {active && (
+                        <Chip className="bg-sky-100 text-sky-700">Viewing</Chip>
+                      )}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
-      {/* RIGHT: Student Detail */}
-      <div className="w-2/3 overflow-y-auto">
-        {viewingStudent ? (
-          <div>
-            <h2 className="text-2xl font-bold mb-2">
-              {viewingStudent.name}{" "}
-              <span className="text-gray-400 text-sm">
-                ({viewingStudent.id})
-              </span>
-            </h2>
-
-            {viewingStudentEnrollmentGroups.length === 0 && (
-              <p>No active enrollments.</p>
-            )}
-
-            {viewingStudentEnrollmentGroups.map((group, idx) => (
-              <div key={idx} className="mb-6 border p-4 rounded shadow-sm">
-                <h3 className="font-bold text-lg mb-2">
-                  {group.courseName} -{" "}
-                  <span className="text-gray-500 text-sm">{group.round}</span>
-                </h3>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-gray-100">
-                      <th className="p-2 text-left">#</th>
-                      <th className="p-2 text-left">
-                        Date (Click to Reschedule)
-                      </th>
-                      <th className="p-2 text-left">Time</th>
-                      <th className="p-2 text-left">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {group.lessons.map((l) => (
-                      <tr key={l.id} className="border-b">
-                        <td className="p-2">L{l.id}</td>
-                        <td
-                          className="p-2 text-blue-600 cursor-pointer hover:underline"
-                          onClick={() =>
-                            handleOpenReschedule(viewingStudent, l)
-                          }
-                        >
-                          {l.dateStr
-                            ? l.dateStr.split("-").slice(1).join("-")
-                            : "-"}
-
-                          {/* CHANGED: Check if lesson courseId differs from group courseId */}
-                          {l.courseId !== group.courseId && (
-                            <span className="ml-2 text-xs bg-yellow-100 px-1 rounded">
-                              Makeup
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-2">{l.timeSlot || "-"}</td>
-                        <td className="p-2">{l.completed ? "✅" : "⏳"}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            ))}
-          </div>
+      {/* RIGHT */}
+      <div className="flex-1 min-w-0 bg-white overflow-hidden">
+        {!viewingStudent ? (
+          <EmptyState
+            title="Select a student"
+            subtitle="Choose a student on the left to view enrollments."
+          />
         ) : (
-          <div className="flex items-center justify-center h-full">
-            <p className="text-gray-500">Select a student to view details.</p>
+          <div className="h-full overflow-auto">
+            {/* Header */}
+            <div className="sticky top-0 z-10 bg-white/85 backdrop-blur border-b border-gray-200">
+              <div className="p-5 flex items-start justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="text-lg font-semibold text-gray-900 truncate">
+                      {viewingStudent.name}
+                    </div>
+                    <Chip className="bg-gray-100 text-gray-700 font-mono">
+                      {viewingStudent.id}
+                    </Chip>
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Click a lesson date to reschedule.
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <Chip
+                    className="bg-gray-100 text-gray-700"
+                    title="Enrollments"
+                  >
+                    {viewingStudentEnrollmentGroups.length} course(s)
+                  </Chip>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5">
+              {viewingStudentEnrollmentGroups.length === 0 ? (
+                <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
+                  <div className="flex items-center gap-2 text-gray-900 font-semibold">
+                    <CalendarClock className="h-4 w-4 text-gray-500" />
+                    No active enrollments
+                  </div>
+                  <p className="text-sm text-gray-500 mt-2">
+                    This student currently has no lessons enrolled.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {viewingStudentEnrollmentGroups.map((group) => (
+                    <div
+                      key={group.courseId}
+                      className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden"
+                    >
+                      <div className="px-4 py-3 border-b border-gray-200 bg-gray-50 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-gray-900 truncate">
+                            {group.courseName}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            {group.round ? group.round : "—"}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          <Chip
+                            className="bg-gray-100 text-gray-700"
+                            title="Lessons in this course"
+                          >
+                            {group.lessons.length} lessons
+                          </Chip>
+                        </div>
+                      </div>
+
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="text-xs text-gray-500">
+                            <tr className="border-b border-gray-200">
+                              <th className="py-2 px-4 text-left font-medium w-[70px]">
+                                Lesson
+                              </th>
+                              <th className="py-2 px-4 text-left font-medium">
+                                Date
+                              </th>
+                              <th className="py-2 px-4 text-left font-medium w-[120px]">
+                                Time
+                              </th>
+                              <th className="py-2 px-4 text-left font-medium w-[140px]">
+                                Status
+                              </th>
+                            </tr>
+                          </thead>
+
+                          <tbody className="divide-y divide-gray-100">
+                            {group.lessons.map((l) => {
+                              const isMakeup = l.courseId !== group.courseId;
+                              const dateLabel = l.dateStr
+                                ? l.dateStr.split("-").slice(1).join("-")
+                                : "-";
+
+                              return (
+                                <tr
+                                  key={l.id}
+                                  className="hover:bg-gray-50 transition"
+                                >
+                                  <td className="py-2.5 px-4 text-gray-700 font-medium">
+                                    L{l.id}
+                                  </td>
+
+                                  <td className="py-2.5 px-4">
+                                    <button
+                                      type="button"
+                                      className={cx(
+                                        "inline-flex items-center gap-2 rounded-lg px-2 py-1 -ml-2",
+                                        "text-sky-700 hover:bg-sky-50 transition",
+                                        "focus:outline-none focus:ring-2 focus:ring-blue-500/15"
+                                      )}
+                                      onClick={() =>
+                                        handleOpenReschedule(viewingStudent, l)
+                                      }
+                                      title="Reschedule"
+                                    >
+                                      <CalendarClock className="h-4 w-4" />
+                                      <span className="font-medium">
+                                        {dateLabel}
+                                      </span>
+                                      {isMakeup && (
+                                        <Chip
+                                          className="bg-yellow-100 text-yellow-800"
+                                          title="Makeup lesson"
+                                        >
+                                          Makeup
+                                        </Chip>
+                                      )}
+                                    </button>
+                                  </td>
+
+                                  <td className="py-2.5 px-4 text-gray-700">
+                                    {l.timeSlot || "-"}
+                                  </td>
+
+                                  <td className="py-2.5 px-4">
+                                    {l.completed ? (
+                                      <span className="inline-flex items-center gap-2">
+                                        <span className="h-8 px-3 inline-flex items-center gap-2 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-100 text-xs font-semibold">
+                                          <CheckCircle2 className="h-4 w-4" />
+                                          Completed
+                                        </span>
+                                      </span>
+                                    ) : (
+                                      <span className="inline-flex items-center gap-2">
+                                        <span className="h-8 px-3 inline-flex items-center gap-2 rounded-lg bg-amber-50 text-amber-700 border border-amber-100 text-xs font-semibold">
+                                          <Clock3 className="h-4 w-4" />
+                                          Pending
+                                        </span>
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
 
       {/* RESCHEDULE MODAL */}
       {reschedulingLesson && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded shadow-lg w-[500px] max-h-[80vh] overflow-y-auto">
-            <h3 className="font-bold text-lg mb-4">
-              Reschedule Lesson {reschedulingLesson.lesson.id}
-            </h3>
-            <p className="mb-4">
-              Current:{" "}
-              <span className="font-mono">
-                {reschedulingLesson.lesson.dateStr}
-              </span>{" "}
-              ({reschedulingLesson.lesson.timeSlot})
-            </p>
+        <div
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm grid place-items-center p-4"
+          onMouseDown={() => setReschedulingLesson(null)}
+        >
+          <div
+            className="w-full max-w-lg max-h-[80vh] overflow-auto bg-white rounded-lg border border-gray-200 shadow-lg"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 border-b border-gray-200">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-gray-900">
+                    Reschedule lesson L{reschedulingLesson.lesson.id}
+                  </div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    Current:{" "}
+                    <span className="font-mono">
+                      {reschedulingLesson.lesson.dateStr || "—"}
+                    </span>{" "}
+                    {reschedulingLesson.lesson.timeSlot
+                      ? `(${reschedulingLesson.lesson.timeSlot})`
+                      : ""}
+                  </div>
+                </div>
 
-            <h4 className="font-semibold mb-2">Available Sessions:</h4>
-            <div className="space-y-2">
-              {reschedulingLesson.options.map((opt, i) => (
                 <button
-                  key={i}
-                  className="w-full border p-2 rounded hover:bg-blue-50 text-left flex justify-between"
-                  onClick={() => confirmReschedule(opt)}
+                  type="button"
+                  className="h-9 px-3 rounded-lg text-sm text-gray-700 hover:bg-gray-900/5 transition active:scale-95 cursor-pointer"
+                  onClick={() => setReschedulingLesson(null)}
+                  title="Close"
                 >
-                  <span>
-                    {opt.dateStr} ({opt.timeSlot})
-                  </span>
-                  <span className="text-xs text-gray-500">{opt.label}</span>
+                  Close
                 </button>
-              ))}
-              {reschedulingLesson.options.length === 0 && (
-                <p className="text-red-500">No other courses found.</p>
-              )}
+              </div>
             </div>
-            <button
-              className="mt-4 text-gray-500 underline text-sm w-full text-center"
-              onClick={() => setReschedulingLesson(null)}
-            >
-              Cancel
-            </button>
+
+            <div className="p-5">
+              <div className="text-xs font-semibold text-gray-700 mb-2">
+                Available sessions
+              </div>
+
+              {reschedulingLesson.options.length === 0 ? (
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+                  No other courses found for this lesson.
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {reschedulingLesson.options.map((opt, i) => (
+                    <button
+                      key={`${opt.courseId}-${opt.lessonId}-${i}`}
+                      type="button"
+                      className={cx(
+                        "w-full text-left rounded-lg border border-gray-200 bg-white px-3 py-2",
+                        "hover:bg-gray-50 hover:shadow-sm transition",
+                        "focus:outline-none focus:ring-2 focus:ring-blue-500/15"
+                      )}
+                      onClick={() => confirmReschedule(opt)}
+                      title="Confirm reschedule"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <div className="text-sm font-medium text-gray-900">
+                            {opt.dateStr}{" "}
+                            <span className="text-gray-500 font-normal">
+                              ({opt.timeSlot})
+                            </span>
+                          </div>
+                          <div className="text-xs text-gray-500 mt-0.5 truncate">
+                            {opt.name || "Lesson"} • {opt.label}
+                          </div>
+                        </div>
+
+                        <Chip className="bg-sky-100 text-sky-700">Select</Chip>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              <button
+                type="button"
+                className="mt-4 w-full h-10 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition active:scale-[0.99] cursor-pointer"
+                onClick={() => setReschedulingLesson(null)}
+              >
+                Cancel
+              </button>
+            </div>
           </div>
         </div>
       )}

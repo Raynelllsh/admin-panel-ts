@@ -2,6 +2,20 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
+import {
+  Search,
+  Filter,
+  Plus,
+  X,
+  Trash2,
+  CalendarClock,
+  ChevronLeft,
+  ChevronRight,
+  Users,
+  CheckCircle2,
+  Clock3,
+} from "lucide-react";
+
 import { formatDateDisplay, MAX_STUDENTS } from "../../utils/adminConstants";
 import { Course, Student, Lesson } from "@/types";
 
@@ -12,17 +26,43 @@ interface TimetableTabProps {
   loading: boolean;
   availableCategories: string[];
   availableRounds: string[];
-  createCourse: (name: string, time: string, date: string, roundNum: string) => Promise<string>;
+  createCourse: (
+    name: string,
+    time: string,
+    date: string,
+    roundNum: string
+  ) => Promise<string>;
   deleteCourse: (courseId: string) => Promise<void>;
-  addStudentToLesson: (courseId: string, lessonId: string, studentId: string) => Promise<{ success: boolean; msg?: string }>;
-  removeStudentFromLesson: (courseId: string, lessonId: string, studentId: string) => Promise<void>;
-  toggleLessonCompletion: (courseId: string, lessonId: string, isComplete: boolean) => Promise<void>;
-  shiftCourseDates: (courseId: string, startLessonId: string, direction: number) => Promise<void>;
+  addStudentToLesson: (
+    courseId: string,
+    lessonId: string,
+    studentId: string
+  ) => Promise<{ success: boolean; msg?: string }>;
+  removeStudentFromLesson: (
+    courseId: string,
+    lessonId: string,
+    studentId: string
+  ) => Promise<void>;
+  toggleLessonCompletion: (
+    courseId: string,
+    lessonId: string,
+    isComplete: boolean
+  ) => Promise<void>;
+  shiftCourseDates: (
+    courseId: string,
+    startLessonId: string,
+    direction: number
+  ) => Promise<void>;
   saveCourseToFirebase: (course: Course) => Promise<void>;
   rescheduleStudent: (
     studentId: string,
     oldLesson: { courseId: string; lessonId: string },
-    newLesson: { courseId: string; lessonId: string; dateStr: string; timeSlot: string }
+    newLesson: {
+      courseId: string;
+      lessonId: string;
+      dateStr: string;
+      timeSlot: string;
+    }
   ) => Promise<{ success: boolean; msg?: string }>;
 }
 
@@ -34,6 +74,53 @@ interface CellData extends Lesson {
 interface SelectedCell {
   courseId: string;
   lessonId: string;
+}
+
+const cx = (...classes: Array<string | false | null | undefined>) =>
+  classes.filter(Boolean).join(" ");
+
+function Chip({
+  children,
+  className = "",
+  title,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  title?: string;
+}) {
+  return (
+    <span
+      title={title}
+      className={cx(
+        "inline-flex items-center rounded-lg px-2 py-0.5 text-[11px] font-semibold",
+        className
+      )}
+    >
+      {children}
+    </span>
+  );
+}
+
+function IconInput({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder: string;
+}) {
+  return (
+    <div className="relative">
+      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="h-9 w-72 rounded-lg border border-gray-200 bg-white/70 pl-9 pr-3 text-xs outline-none transition focus:ring-2 focus:ring-blue-500/15 focus:border-blue-500"
+      />
+    </div>
+  );
 }
 
 export default function TimetableTab({
@@ -48,14 +135,22 @@ export default function TimetableTab({
   removeStudentFromLesson,
   toggleLessonCompletion,
   shiftCourseDates,
-  saveCourseToFirebase,
-  rescheduleStudent,
+  saveCourseToFirebase, // kept for compatibility / future use
+  rescheduleStudent, // kept for compatibility / future use
 }: TimetableTabProps) {
   // --- STATE ---
   const [filterCategory, setFilterCategory] = useState<string>("ALL");
   const [filterRound, setFilterRound] = useState<string>("ALL");
+
   const [selectedCell, setSelectedCell] = useState<SelectedCell | null>(null);
   const [selectedStudentToAdd, setSelectedStudentToAdd] = useState<string>("");
+
+  // UI Toggles
+  const [showFilters, setShowFilters] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // Search (courses)
+  const [courseSearch, setCourseSearch] = useState("");
 
   // Create Form State
   const [createForm, setCreateForm] = useState({
@@ -77,19 +172,41 @@ export default function TimetableTab({
 
   // --- DERIVED DATA ---
   const displayedCourses = useMemo(() => {
-    return allCourses.filter((c) => {
-      const category = c.path?.category || "Uncategorized";
-      const round = c.path?.round || "round001";
-      const matchCat = filterCategory === "ALL" || category === filterCategory;
-      const matchRound = filterRound === "ALL" || round === filterRound;
-      return matchCat && matchRound;
-    });
-  }, [allCourses, filterCategory, filterRound]);
+    const q = courseSearch.trim().toLowerCase();
 
-  // --- HELPER WRAPPERS (Fixes Missing Functions) ---
-  const onCreateCourse = async (name: string, time: string, date: string, roundNum: string) => {
+    return allCourses
+      .filter((c) => {
+        const category = c.path?.category || "Uncategorized";
+        const round = c.path?.round || "round001";
+        const matchCat =
+          filterCategory === "ALL" || category === filterCategory;
+        const matchRound = filterRound === "ALL" || round === filterRound;
+        return matchCat && matchRound;
+      })
+      .filter((c) => {
+        if (!q) return true;
+        return (
+          String(c.name || "")
+            .toLowerCase()
+            .includes(q) ||
+          String(c.id || "")
+            .toLowerCase()
+            .includes(q) ||
+          String(c.timeSlot || "")
+            .toLowerCase()
+            .includes(q)
+        );
+      });
+  }, [allCourses, filterCategory, filterRound, courseSearch]);
+
+  // --- HELPER WRAPPERS ---
+  const onCreateCourse = async (
+    name: string,
+    time: string,
+    date: string,
+    roundNum: string
+  ) => {
     await createCourse(name, time, date, roundNum);
-    // Return extracted category for the filter update
     const parts = name.split("-");
     return parts.length > 0 ? parts[0] : "Uncategorized";
   };
@@ -121,7 +238,13 @@ export default function TimetableTab({
   // --- HANDLERS ---
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!createForm.name || !createForm.time || !createForm.date || !createForm.round) return;
+    if (
+      !createForm.name ||
+      !createForm.time ||
+      !createForm.date ||
+      !createForm.round
+    )
+      return;
 
     const roundNumber = createForm.round.replace("round", "");
     const cat = await onCreateCourse(
@@ -133,11 +256,14 @@ export default function TimetableTab({
 
     setFilterCategory(cat);
     setFilterRound(createForm.round);
+
     setCreateForm({ name: "", time: "", date: "", round: "round001" });
+    setShowCreateModal(false);
   };
 
   const handleAdd = async () => {
     if (!selectedCell || !selectedStudentToAdd) return;
+
     const res = await onAddStudent(
       selectedCell.courseId,
       selectedCell.lessonId,
@@ -155,6 +281,7 @@ export default function TimetableTab({
   const getCellData = (course: Course, lessonId: string): CellData | null => {
     const lesson = course.lessons.find((l) => l.id === lessonId);
     if (!lesson) return null;
+
     const count = lesson.students.length;
     const isFull = count >= MAX_STUDENTS;
     return { ...lesson, count, isFull };
@@ -169,392 +296,679 @@ export default function TimetableTab({
     return { course, lesson };
   }, [selectedCell, allCourses]);
 
-  // Return JSX
+  const activeLessonCount = activeLessonData?.lesson.students.length ?? 0;
+  const activeLessonIsFull = activeLessonCount >= MAX_STUDENTS;
+
+  const availableStudentsForLesson = useMemo(() => {
+    // show all students; optionally you can filter out already enrolled
+    return allStudents;
+  }, [allStudents]);
+
+  // --- UI ---
   return (
-    <div className="flex flex-col h-[calc(100vh-100px)] gap-4">
-      {/* 1. TOP BAR: FILTERS & ACTIONS */}
-      <div className="bg-white p-4 rounded shadow-sm border border-gray-200 flex flex-wrap gap-6 items-end justify-between shrink-0">
-        {/* Filters */}
-        <div className="flex gap-4">
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
-              Category
-            </label>
-            <select
-              className="border p-2 rounded text-sm min-w-[120px]"
-              value={filterCategory}
-              onChange={(e) => setFilterCategory(e.target.value)}
-            >
-              {availableCategories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">
-              Round
-            </label>
-            <select
-              className="border p-2 rounded text-sm min-w-[120px]"
-              value={filterRound}
-              onChange={(e) => setFilterRound(e.target.value)}
-            >
-              <option value="ALL">ALL ROUNDS</option>
-              {availableRounds.map((r) => (
-                <option key={r} value={r}>
-                  {r}
-                </option>
-              ))}
-            </select>
-          </div>
+    <div className="m-8 h-[calc(100vh-144px)] overflow-hidden flex flex-col gap-4">
+      {/* Toolbar */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={() => setShowCreateModal(true)}
+          className="px-3 py-2 bg-sky-500 cursor-pointer flex items-center gap-2 rounded-lg text-white hover:opacity-85 transition"
+          title="Create course"
+        >
+          <Plus className="h-4 w-4" />
+          Create Course
+        </button>
+
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowFilters((v) => !v)}
+            className={cx(
+              "h-9 px-3 rounded-lg border border-gray-200 bg-white text-gray-700",
+              "hover:bg-gray-900/5 transition active:scale-95 cursor-pointer",
+              "focus:outline-none focus:ring-2 focus:ring-blue-500/15"
+            )}
+            title="Filters"
+          >
+            <span className="inline-flex items-center gap-2 text-sm font-medium">
+              <Filter className="h-4 w-4 text-gray-600" />
+              Filters
+            </span>
+          </button>
+
+          {showFilters && (
+            <div className="absolute left-0 top-full mt-2 w-[320px] bg-white rounded-lg border border-gray-200 shadow-lg overflow-hidden z-30">
+              <div className="p-4 border-b border-gray-200 flex items-start justify-between gap-2">
+                <div>
+                  <div className="text-sm font-semibold text-gray-900">
+                    Filter options
+                  </div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    Narrow visible courses.
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowFilters(false)}
+                  className="h-9 w-9 grid place-items-center rounded-lg text-gray-700 hover:bg-gray-900/5 transition active:scale-95 cursor-pointer"
+                  title="Close"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="p-4 grid gap-3">
+                <div className="grid gap-1">
+                  <label className="text-[11px] font-semibold text-gray-600">
+                    Category
+                  </label>
+                  <select
+                    className="h-9 rounded-lg border border-gray-200 bg-white px-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/15 focus:border-blue-500 cursor-pointer"
+                    value={filterCategory}
+                    onChange={(e) => setFilterCategory(e.target.value)}
+                  >
+                    {availableCategories.map((c) => (
+                      <option key={c} value={c}>
+                        {c}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid gap-1">
+                  <label className="text-[11px] font-semibold text-gray-600">
+                    Round
+                  </label>
+                  <select
+                    className="h-9 rounded-lg border border-gray-200 bg-white px-2 text-sm outline-none focus:ring-2 focus:ring-blue-500/15 focus:border-blue-500 cursor-pointer"
+                    value={filterRound}
+                    onChange={(e) => setFilterRound(e.target.value)}
+                  >
+                    <option value="ALL">ALL ROUNDS</option>
+                    {availableRounds.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="pt-2 border-t border-gray-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Chip className="bg-gray-100 text-gray-700">
+                      {filterCategory}
+                    </Chip>
+                    <Chip className="bg-gray-100 text-gray-700">
+                      {filterRound}
+                    </Chip>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setShowFilters(false)}
+                    className="text-xs font-semibold text-sky-700 hover:underline cursor-pointer"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Quick Create Form */}
-        <form
-          onSubmit={handleCreate}
-          className="flex gap-2 items-end border-l pl-4 border-gray-200"
-        >
-          <div className="flex flex-col">
-            <label className="text-[10px] font-bold text-gray-400 uppercase">
-              Course ID
-            </label>
-            <input
-              className="border p-2 rounded text-sm w-24 placeholder:SPEC-C1"
-              value={createForm.name}
-              onChange={(e) =>
-                setCreateForm({ ...createForm, name: e.target.value })
-              }
-            />
-          </div>
-          <div className="flex flex-col">
-            <label className="text-[10px] font-bold text-gray-400 uppercase">
-              Round
-            </label>
-            <select
-              className="border p-2 rounded text-sm w-28"
-              value={createForm.round}
-              onChange={(e) =>
-                setCreateForm({ ...createForm, round: e.target.value })
-              }
-            >
-              {/* Show existing rounds plus a few future options */}
-              {availableRounds.length > 0 ? (
-                availableRounds.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))
-              ) : (
-                <option value="round001">round001</option>
-              )}
-              {/* Fallback extra rounds if array is empty or limited */}
-              {!availableRounds.includes("round001") && <option value="round001">round001</option>}
-              {!availableRounds.includes("round002") && <option value="round002">round002</option>}
-              {!availableRounds.includes("round003") && <option value="round003">round003</option>}
-            </select>
-          </div>
-          <div className="flex flex-col">
-            <label className="text-[10px] font-bold text-gray-400 uppercase">
-              Time
-            </label>
-            <input
-              className="border p-2 rounded text-sm w-20 placeholder:10:00"
-              value={createForm.time}
-              onChange={(e) =>
-                setCreateForm({ ...createForm, time: e.target.value })
-              }
-            />
-          </div>
-          <div className="flex flex-col">
-            <label className="text-[10px] font-bold text-gray-400 uppercase">
-              Start Date
-            </label>
-            <input
-              type="date"
-              className="border p-2 rounded text-sm"
-              value={createForm.date}
-              onChange={(e) =>
-                setCreateForm({ ...createForm, date: e.target.value })
-              }
-            />
-          </div>
-          <button
-            type="submit"
-            className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-bold hover:bg-blue-700 h-[38px]"
-          >
-            Create
-          </button>
-        </form>
+        <IconInput
+          value={courseSearch}
+          onChange={setCourseSearch}
+          placeholder="Search course, id, time…"
+        />
+
+        <div className="ml-auto flex items-center gap-2">
+          <Chip className="bg-gray-100 text-gray-700" title="Visible courses">
+            {displayedCourses.length} courses
+          </Chip>
+          <Chip className="bg-gray-100 text-gray-700" title="Students">
+            {allStudents.length} students
+          </Chip>
+        </div>
       </div>
 
-      {/* 2. MAIN TABLE AREA (Vertical Layout) */}
-      <div className="flex-1 overflow-auto bg-white rounded shadow border border-gray-200 relative">
-        <table className="w-full text-sm border-collapse relative">
-          <thead className="sticky top-0 z-20 shadow-sm">
-            <tr className="bg-gray-50 border-b">
-              {/* Sticky Corner */}
-              <th className="p-3 border-r bg-gray-100 text-left w-24 sticky left-0 z-30 font-bold text-gray-600">
-                Lesson
-              </th>
-              {/* Course Headers */}
-              {displayedCourses.length === 0 ? (
-                <th className="p-8 text-center text-gray-400 font-normal italic">
-                  No courses found for this category/round filter.
+      {/* Main table shell */}
+      <div className="flex-1 min-h-0 overflow-hidden bg-white rounded-xl border border-gray-200 shadow-sm">
+        <div className="h-full overflow-auto">
+          <table className="w-full text-sm">
+            <thead className="sticky top-0 z-20 bg-white">
+              <tr className="border-b border-gray-200">
+                {/* Sticky corner */}
+                <th className="sticky left-0 z-30 bg-gray-50 border-r border-gray-200 p-3 text-left w-[360px]">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-2 text-gray-700 font-semibold">
+                      <CalendarClock className="h-4 w-4 text-gray-500" />
+                      Lessons
+                    </div>
+                    {loading ? (
+                      <Chip className="bg-amber-50 text-amber-700 border border-amber-100">
+                        Loading…
+                      </Chip>
+                    ) : (
+                      <Chip className="bg-gray-100 text-gray-700">12 rows</Chip>
+                    )}
+                  </div>
                 </th>
-              ) : (
-                displayedCourses.map((course) => (
-                  <th
-                    key={course.id}
-                    className="p-3 border-r min-w-[160px] align-top bg-gray-50"
-                  >
-                    <div className="flex justify-between items-start">
-                      <div className="text-left">
-                        <div className="font-bold text-gray-800 text-base">
-                          {course.name}
+
+                {/* Course headers */}
+                {displayedCourses.length === 0 ? (
+                  <th className="p-8 text-center text-gray-400 font-normal">
+                    No courses found for the selected filters.
+                  </th>
+                ) : (
+                  displayedCourses.map((course) => (
+                    <th
+                      key={course.id}
+                      className="p-3 border-r border-gray-200 min-w-[220px] align-top bg-white"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="text-left text-sm font-semibold text-gray-900 truncate">
+                            {course.name}
+                          </div>
+                          <div className="text-xs text-gray-500 font-mono mt-0.5">
+                            {course.timeSlot || "—"}
+                          </div>
                         </div>
-                        <div className="text-xs text-gray-500 font-mono">
-                          {course.timeSlot}
+
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (confirm(`Delete course ${course.name}?`)) {
+                              onDeleteCourse(course);
+                            }
+                          }}
+                          className="h-9 w-9 grid place-items-center rounded-lg text-gray-700 hover:bg-red-50 hover:text-red-600 transition active:scale-95 cursor-pointer"
+                          title="Delete course"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </th>
+                  ))
+                )}
+              </tr>
+            </thead>
+
+            <tbody className="divide-y divide-gray-100">
+              {Array.from({ length: 12 }).map((_, i) => {
+                const lessonNum = i + 1;
+                const lessonIdStr = lessonNum.toString();
+
+                const refLessonName =
+                  displayedCourses[0]?.lessons.find((l) => l.id === lessonIdStr)
+                    ?.name || `Lesson ${lessonNum}`;
+
+                return (
+                  <tr
+                    key={lessonNum}
+                    className="hover:bg-gray-50/40 transition"
+                  >
+                    {/* Row header */}
+                    <td className="sticky left-0 z-10 bg-white border-r border-gray-200 p-3">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-gray-50 border border-gray-200 grid place-items-center">
+                          <span className="text-sm font-semibold text-gray-700">
+                            {lessonNum}
+                          </span>
+                        </div>
+
+                        <div className="min-w-0">
+                          <div className="text-sm font-semibold text-gray-900 truncate">
+                            {refLessonName}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-0.5">
+                            Click a cell to manage roster
+                          </div>
                         </div>
                       </div>
-                      <button
-                        onClick={() => {
-                          if (
-                            confirm(
-                              `Delete course ${course.name}?`
-                            )
-                          ) {
-                            onDeleteCourse(course);
-                          }
-                        }}
-                        className="text-gray-300 hover:text-red-500 text-lg leading-none px-1"
-                        title="Delete Course"
-                      >
-                        &times;
-                      </button>
-                    </div>
-                  </th>
-                ))
-              )}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-100">
-            {Array.from({ length: 12 }).map((_, i) => {
-              const lessonNum = i + 1;
-              const lessonIdStr = lessonNum.toString();
-              
-              const refLessonName =
-                displayedCourses[0]?.lessons.find((l) => l.id === lessonIdStr)
-                  ?.name || `Lesson ${lessonNum}`;
+                    </td>
 
-              return (
-                <tr key={lessonNum} className="hover:bg-gray-50/50">
-                  {/* Row Header (Lesson) */}
-                  <td className="p-3 border-r bg-white sticky left-0 z-10 font-medium text-gray-500 text-center shadow-[1px_0_0_0_rgba(0,0,0,0.05)]">
-                    <div className="text-lg font-bold text-gray-300">
-                      {lessonNum}
-                    </div>
-                    <div className="text-[10px] text-blue-600 leading-tight mt-1 truncate w-20 mx-auto">
-                      {refLessonName}
-                    </div>
-                  </td>
+                    {/* Cells */}
+                    {displayedCourses.map((course) => {
+                      const data = getCellData(course, lessonIdStr);
 
-                  {/* Course Cells */}
-                  {displayedCourses.map((course) => {
-                    const data = getCellData(course, lessonIdStr);
-                    if (!data)
+                      if (!data) {
+                        return (
+                          <td
+                            key={course.id}
+                            className="border-r border-gray-200 bg-gray-50"
+                          />
+                        );
+                      }
+
+                      const isSelected =
+                        selectedCell?.courseId === course.id &&
+                        selectedCell?.lessonId === lessonIdStr;
+
+                      const cellBg = data.completed
+                        ? "bg-emerald-50"
+                        : data.isFull
+                        ? "bg-rose-50"
+                        : "bg-white";
+
+                      const countChip = data.isFull
+                        ? "bg-rose-100 text-rose-700"
+                        : "bg-sky-100 text-sky-700";
+
                       return (
                         <td
                           key={course.id}
-                          className="border-r bg-gray-50"
-                        ></td>
-                      );
-
-                    // Determine Cell Style
-                    let statusColor = "bg-white";
-                    if (data.completed) statusColor = "bg-green-50";
-                    else if (data.isFull) statusColor = "bg-red-50";
-
-                    return (
-                      <td
-                        key={course.id}
-                        className={`p-2 border-r cursor-pointer transition-all hover:brightness-95 ${statusColor}`}
-                        onClick={() => {
-                          setSelectedCell({
-                            courseId: course.id,
-                            lessonId: lessonIdStr,
-                          });
-                          setSelectedStudentToAdd("");
-                        }}
-                      >
-                        <div className="flex justify-between items-center mb-1">
-                          <span
-                            className={`text-xs font-mono font-bold ${
-                              data.isFull ? "text-red-600" : "text-gray-600"
-                            }`}
-                          >
-                            {formatDateDisplay(data.dateStr)}
-                          </span>
-                          {data.count > 0 && (
-                            <span
-                              className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
-                                data.isFull
-                                  ? "bg-red-200 text-red-800"
-                                  : "bg-blue-100 text-blue-700"
-                              }`}
-                            >
-                              {data.count}
-                            </span>
+                          className={cx(
+                            "border-r border-gray-200 p-2 align-top",
+                            cellBg
                           )}
-                        </div>
-                        {/* Mini roster preview */}
-                        <div className="flex flex-wrap gap-1">
-                          {data.students.map((sid) => (
-                            <div
-                              key={sid}
-                              className="w-1.5 h-1.5 rounded-full bg-blue-400"
-                              title={sid}
-                            ></div>
-                          ))}
-                        </div>
-                      </td>
-                    );
-                  })}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+                        >
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedCell({
+                                courseId: course.id,
+                                lessonId: lessonIdStr,
+                              });
+                              setSelectedStudentToAdd("");
+                            }}
+                            className={cx(
+                              "w-full text-left rounded-lg border border-transparent p-2 transition cursor-pointer",
+                              "hover:bg-gray-900/5 hover:border-gray-200 hover:shadow-sm",
+                              "focus:outline-none focus:ring-2 focus:ring-blue-500/15",
+                              isSelected && "border-gray-200 bg-white shadow-sm"
+                            )}
+                            title="Open lesson"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="min-w-0">
+                                <div className="text-xs font-mono font-semibold text-gray-700">
+                                  {formatDateDisplay(data.dateStr)}
+                                </div>
+
+                                <div className="mt-1 flex items-center gap-2">
+                                  {data.completed ? (
+                                    <Chip className="bg-emerald-100 text-emerald-700">
+                                      <span className="inline-flex items-center gap-1">
+                                        <CheckCircle2 className="h-3.5 w-3.5" />
+                                        Completed
+                                      </span>
+                                    </Chip>
+                                  ) : (
+                                    <Chip className="bg-amber-100 text-amber-700">
+                                      <span className="inline-flex items-center gap-1">
+                                        <Clock3 className="h-3.5 w-3.5" />
+                                        Pending
+                                      </span>
+                                    </Chip>
+                                  )}
+                                </div>
+                              </div>
+
+                              {data.count > 0 && (
+                                <Chip
+                                  className={cx("shrink-0", countChip)}
+                                  title="Enrolled count"
+                                >
+                                  {data.count}/{MAX_STUDENTS}
+                                </Chip>
+                              )}
+                            </div>
+
+                            {/* Mini roster preview dots */}
+                            <div className="mt-2 flex flex-wrap gap-1">
+                              {data.students.slice(0, 18).map((sid) => (
+                                <span
+                                  key={sid}
+                                  className={cx(
+                                    "h-1.5 w-1.5 rounded-full",
+                                    data.completed
+                                      ? "bg-emerald-400"
+                                      : "bg-sky-400"
+                                  )}
+                                  title={sid}
+                                />
+                              ))}
+                              {data.students.length > 18 && (
+                                <span className="text-[10px] text-gray-500 ml-1">
+                                  +{data.students.length - 18}
+                                </span>
+                              )}
+                            </div>
+                          </button>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       </div>
 
-      {/* 3. EDIT MODAL (Overlay) */}
-      {selectedCell && activeLessonData && (
+      {/* Create Course Modal */}
+      {showCreateModal && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm"
-          onClick={() => setSelectedCell(null)}
+          className="fixed inset-0 z-50 bg-black/50 backdrop-blur-sm grid place-items-center p-4"
+          onMouseDown={() => setShowCreateModal(false)}
         >
           <div
-            className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden flex flex-col max-h-[90vh]"
-            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-xl bg-white rounded-lg border border-gray-200 shadow-lg overflow-hidden"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <div className="p-5 border-b border-gray-200 flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-gray-900">
+                  Create course
+                </div>
+                <div className="text-xs text-gray-500 mt-0.5">
+                  This creates a new course with a start date and round.
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="h-9 w-9 grid place-items-center rounded-lg text-gray-700 hover:bg-gray-900/5 transition active:scale-95 cursor-pointer"
+                onClick={() => setShowCreateModal(false)}
+                title="Close"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreate} className="p-5 grid gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="grid gap-1">
+                  <label className="text-[11px] font-semibold text-gray-600">
+                    Course ID / Name
+                  </label>
+                  <input
+                    className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none transition focus:ring-2 focus:ring-blue-500/15 focus:border-blue-500"
+                    value={createForm.name}
+                    placeholder="SPEC-C1"
+                    onChange={(e) =>
+                      setCreateForm({ ...createForm, name: e.target.value })
+                    }
+                  />
+                </div>
+
+                <div className="grid gap-1">
+                  <label className="text-[11px] font-semibold text-gray-600">
+                    Round
+                  </label>
+                  <select
+                    className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none transition focus:ring-2 focus:ring-blue-500/15 focus:border-blue-500 cursor-pointer"
+                    value={createForm.round}
+                    onChange={(e) =>
+                      setCreateForm({ ...createForm, round: e.target.value })
+                    }
+                  >
+                    {availableRounds.length > 0 ? (
+                      availableRounds.map((r) => (
+                        <option key={r} value={r}>
+                          {r}
+                        </option>
+                      ))
+                    ) : (
+                      <option value="round001">round001</option>
+                    )}
+                    {!availableRounds.includes("round001") && (
+                      <option value="round001">round001</option>
+                    )}
+                    {!availableRounds.includes("round002") && (
+                      <option value="round002">round002</option>
+                    )}
+                    {!availableRounds.includes("round003") && (
+                      <option value="round003">round003</option>
+                    )}
+                  </select>
+                </div>
+
+                <div className="grid gap-1">
+                  <label className="text-[11px] font-semibold text-gray-600">
+                    Time
+                  </label>
+                  <input
+                    className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none transition focus:ring-2 focus:ring-blue-500/15 focus:border-blue-500"
+                    value={createForm.time}
+                    placeholder="10:00"
+                    onChange={(e) =>
+                      setCreateForm({ ...createForm, time: e.target.value })
+                    }
+                  />
+                </div>
+
+                <div className="grid gap-1">
+                  <label className="text-[11px] font-semibold text-gray-600">
+                    Start date
+                  </label>
+                  <input
+                    type="date"
+                    className="h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none transition focus:ring-2 focus:ring-blue-500/15 focus:border-blue-500"
+                    value={createForm.date}
+                    onChange={(e) =>
+                      setCreateForm({ ...createForm, date: e.target.value })
+                    }
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-200">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="h-10 px-4 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition active:scale-[0.99] cursor-pointer"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  className="h-10 px-4 rounded-lg bg-sky-500 text-white hover:opacity-90 transition active:scale-[0.99] cursor-pointer"
+                >
+                  Create
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Lesson Modal */}
+      {selectedCell && activeLessonData && (
+        <div
+          className="fixed inset-0 z-1000 bg-black/50 backdrop-blur-sm grid place-items-center p-4"
+          onMouseDown={() => setSelectedCell(null)}
+        >
+          <div
+            className="w-full max-w-xl overflow-hidden bg-white rounded-lg border border-gray-200 shadow-lg flex flex-col"
+            onMouseDown={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="bg-gray-100 p-4 border-b flex justify-between items-center">
-              <div>
-                <h3 className="text-lg font-bold text-gray-800">
-                  {activeLessonData.course.name}
-                </h3>
-                <p className="text-sm text-gray-500">
+            <div className="p-5 border-b border-gray-200 flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 min-w-0">
+                  <div className="text-sm font-semibold text-gray-900 truncate">
+                    {activeLessonData.course.name}
+                  </div>
+                  <Chip className="bg-gray-100 text-gray-700 font-mono">
+                    {activeLessonData.course.timeSlot || "—"}
+                  </Chip>
+                </div>
+
+                <div className="text-xs text-gray-500 mt-1">
                   Lesson {activeLessonData.lesson.id} •{" "}
-                  {activeLessonData.lesson.dateStr}
-                </p>
+                  <span className="font-mono">
+                    {activeLessonData.lesson.dateStr || "—"}
+                  </span>
+                </div>
               </div>
+
               <button
+                type="button"
+                className="h-9 w-9 grid place-items-center rounded-lg text-gray-700 hover:bg-gray-900/5 transition active:scale-95 cursor-pointer"
                 onClick={() => setSelectedCell(null)}
-                className="text-gray-400 hover:text-gray-600 text-2xl"
+                title="Close"
               >
-                &times;
+                <X className="h-4 w-4" />
               </button>
             </div>
 
             {/* Content */}
-            <div className="p-4 overflow-y-auto flex-1">
-              {/* Status Toggle */}
-              <div className="flex justify-between items-center bg-gray-50 p-3 rounded mb-4 border">
-                <span className="text-sm font-bold text-gray-600">
-                  Class Status
-                </span>
+            <div className="p-5 overflow-auto flex-1 space-y-4">
+              {/* Status + capacity */}
+              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 text-gray-700">
+                  <Users className="h-4 w-4 text-gray-500" />
+                  <div className="text-sm font-semibold">
+                    {activeLessonCount}/{MAX_STUDENTS} enrolled
+                  </div>
+                  {activeLessonIsFull && (
+                    <Chip className="bg-rose-100 text-rose-700">Full</Chip>
+                  )}
+                </div>
+
                 <button
+                  type="button"
                   onClick={() =>
                     onToggleCompletion(
                       activeLessonData.course.id,
                       activeLessonData.lesson.id
                     )
                   }
-                  className={`px-3 py-1 rounded text-xs font-bold ${
+                  className={cx(
+                    "h-9 px-3 rounded-lg text-sm font-semibold transition active:scale-95 cursor-pointer",
+                    "focus:outline-none focus:ring-2 focus:ring-blue-500/15",
                     activeLessonData.lesson.completed
-                      ? "bg-green-500 text-white"
-                      : "bg-gray-200 text-gray-600"
-                  }`}
+                      ? "bg-emerald-600 text-white hover:bg-emerald-700"
+                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  )}
+                  title="Toggle completion"
                 >
-                  {activeLessonData.lesson.completed ? "COMPLETED" : "PENDING"}
+                  {activeLessonData.lesson.completed ? (
+                    <span className="inline-flex items-center gap-2">
+                      <CheckCircle2 className="h-4 w-4" />
+                      Completed
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-2">
+                      <Clock3 className="h-4 w-4" />
+                      Pending
+                    </span>
+                  )}
                 </button>
               </div>
 
-              {/* Student List */}
-              <div className="space-y-2 mb-6">
-                <h4 className="text-xs font-bold text-gray-400 uppercase">
-                  Enrolled Students ({activeLessonData.lesson.students.length}/
-                  {MAX_STUDENTS})
-                </h4>
-                {activeLessonData.lesson.students.length === 0 && (
-                  <p className="text-sm text-gray-400 italic">
-                    No students yet.
-                  </p>
-                )}
-                {activeLessonData.lesson.students.map((sid) => {
-                  const studentName =
-                    allStudents.find((s) => s.id === sid)?.name || sid;
-                  return (
-                    <div
-                      key={sid}
-                      className="flex justify-between items-center p-2 hover:bg-gray-50 rounded border border-transparent hover:border-gray-200"
-                    >
-                      <span className="font-medium text-gray-700">
-                        {studentName}
-                      </span>
-                      <button
-                        onClick={() =>
-                          onRemoveStudent(
-                            activeLessonData.course.id,
-                            activeLessonData.lesson.id,
-                            sid
-                          )
-                        }
-                        className="text-red-400 hover:text-red-600 text-sm font-bold px-2"
-                      >
-                        Remove
-                      </button>
+              {/* Roster */}
+              <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+                  <div className="text-sm font-semibold text-gray-900">
+                    Enrolled students
+                  </div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    Remove students from this lesson.
+                  </div>
+                </div>
+
+                <div className="p-4 max-h-64 overflow-auto">
+                  {activeLessonData.lesson.students.length === 0 ? (
+                    <div className="text-sm text-gray-400">
+                      No students yet.
                     </div>
-                  );
-                })}
+                  ) : (
+                    <div className="divide-y divide-gray-100 rounded-lg border border-gray-100 overflow-hidden">
+                      {activeLessonData.lesson.students.map((sid) => {
+                        const studentName =
+                          allStudents.find((s) => s.id === sid)?.name || sid;
+
+                        return (
+                          <div
+                            key={sid}
+                            className="px-3 py-2 flex items-center justify-between gap-3 bg-white hover:bg-gray-50 transition"
+                          >
+                            <div className="min-w-0">
+                              <div className="text-sm font-medium text-gray-900 truncate">
+                                {studentName}
+                              </div>
+                              <div className="text-xs text-gray-500 font-mono mt-0.5">
+                                {sid}
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onRemoveStudent(
+                                  activeLessonData.course.id,
+                                  activeLessonData.lesson.id,
+                                  sid
+                                )
+                              }
+                              className="h-9 px-3 rounded-lg text-sm font-semibold text-red-600 hover:bg-red-50 transition active:scale-95 cursor-pointer"
+                              title="Remove"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               </div>
 
-              {/* Add Student */}
-              <div className="border-t pt-4">
-                <h4 className="text-xs font-bold text-gray-400 uppercase mb-2">
-                  Add Student
-                </h4>
-                <div className="flex gap-2">
-                  <select
-                    className="flex-1 border p-2 rounded text-sm bg-white"
-                    value={selectedStudentToAdd}
-                    onChange={(e) => setSelectedStudentToAdd(e.target.value)}
-                  >
-                    <option value="">Select Student...</option>
-                    {allStudents.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name} ({s.id})
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    disabled={
-                      !selectedStudentToAdd ||
-                      activeLessonData.lesson.students.length >= MAX_STUDENTS
-                    }
-                    onClick={handleAdd}
-                    className="bg-blue-600 text-white px-4 py-2 rounded text-sm font-bold disabled:opacity-50 hover:bg-blue-700"
-                  >
-                    Add
-                  </button>
+              {/* Add student */}
+              <div className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b border-gray-200 bg-gray-50">
+                  <div className="text-sm font-semibold text-gray-900">
+                    Add student
+                  </div>
+                  <div className="text-xs text-gray-500 mt-0.5">
+                    Add a student to this lesson (if not full).
+                  </div>
+                </div>
+
+                <div className="p-4 flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    <select
+                      className="flex-1 h-10 rounded-lg border border-gray-200 bg-white px-3 text-sm outline-none transition focus:ring-2 focus:ring-blue-500/15 focus:border-blue-500 cursor-pointer"
+                      value={selectedStudentToAdd}
+                      onChange={(e) => setSelectedStudentToAdd(e.target.value)}
+                    >
+                      <option value="">Select student…</option>
+                      {availableStudentsForLesson.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.id})
+                        </option>
+                      ))}
+                    </select>
+
+                    <button
+                      type="button"
+                      disabled={!selectedStudentToAdd || activeLessonIsFull}
+                      onClick={handleAdd}
+                      className="h-10 px-4 rounded-lg bg-sky-500 text-white hover:opacity-90 transition active:scale-[0.99] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Add
+                    </button>
+                  </div>
+
+                  {activeLessonIsFull && (
+                    <div className="text-xs text-rose-600">
+                      This lesson is full ({MAX_STUDENTS} students).
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
 
-            {/* Footer Actions */}
-            <div className="bg-gray-50 p-3 border-t flex justify-between gap-2">
+            {/* Footer actions */}
+            <div className="p-4 border-t border-gray-200 bg-gray-50 flex items-center justify-between gap-2">
               <button
+                type="button"
                 onClick={() =>
                   onShiftDates(
                     activeLessonData.course.id,
@@ -562,11 +976,15 @@ export default function TimetableTab({
                     -1
                   )
                 }
-                className="flex-1 py-2 bg-white border rounded text-xs text-gray-600 hover:bg-gray-100"
+                className="h-10 px-3 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition active:scale-[0.99] cursor-pointer inline-flex items-center gap-2"
+                title="Shift earlier"
               >
-                Shift Date -7 Days
+                <ChevronLeft className="h-4 w-4" />
+                Shift -7 days
               </button>
+
               <button
+                type="button"
                 onClick={() =>
                   onShiftDates(
                     activeLessonData.course.id,
@@ -574,9 +992,11 @@ export default function TimetableTab({
                     1
                   )
                 }
-                className="flex-1 py-2 bg-white border rounded text-xs text-gray-600 hover:bg-gray-100"
+                className="h-10 px-3 rounded-lg border border-gray-200 bg-white text-gray-700 hover:bg-gray-50 transition active:scale-[0.99] cursor-pointer inline-flex items-center gap-2"
+                title="Shift later"
               >
-                Shift Date +7 Days
+                Shift +7 days
+                <ChevronRight className="h-4 w-4" />
               </button>
             </div>
           </div>

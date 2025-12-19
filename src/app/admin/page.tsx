@@ -51,7 +51,7 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 font-sans">
-      <nav className="z-100 fixed top-0 w-full px-8 h-20 flex justify-between items-center bg-white border-b shadow-lg">
+      <nav className="z-100 fixed top-0 w-full px-8 h-20 flex justify-between items-center bg-white border-b shadow">
         <div className="flex gap-5 items-center cursor-pointer">
           <img
             src={logo.src}
@@ -61,34 +61,34 @@ export default function AdminDashboard() {
           />
           <h1 className="text-2xl font-semibold">Admin Panel</h1>
         </div>
-        <div className="text-xl flex gap-5">
+        <div className="text-lg flex gap-8">
           <button
             onClick={() => setActiveTab("TIMETABLE")}
-            className="cursor-pointer hover:opacity-80 transition"
+            className="cursor-pointer hover:opacity-80 active:scale-95 transition"
           >
             Timetable
           </button>
           <button
             onClick={() => setActiveTab("STUDENTS")}
-            className="cursor-pointer hover:opacity-80 transition"
+            className="cursor-pointer hover:opacity-80 active:scale-95 transition"
           >
             Students
           </button>
           <button
             onClick={() => setActiveTab("ENROLLMENT")}
-            className="cursor-pointer hover:opacity-80 transition"
+            className="cursor-pointer hover:opacity-80 active:scale-95 transition"
           >
             Enrollment
           </button>
           <button
             onClick={() => setActiveTab("PDF MANAGER")}
-            className="cursor-pointer hover:opacity-80 transition"
+            className="cursor-pointer hover:opacity-80 active:scale-95 transition"
           >
             PDF Manager
           </button>
           <button
             onClick={() => setActiveTab("REQUESTS")}
-            className="cursor-pointer hover:opacity-80 transition"
+            className="cursor-pointer hover:opacity-80 active:scale-95 transition"
           >
             Requests
           </button>
