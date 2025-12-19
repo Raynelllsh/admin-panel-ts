@@ -246,7 +246,7 @@ function DeleteConfirm({ onConfirm }: { onConfirm: () => void }) {
           className="h-9 w-9 grid place-items-center rounded-lg text-gray-700 hover:bg-red-50 hover:text-red-600 transition active:scale-95 cursor-pointer"
           title="Delete"
         >
-          <Trash2 className="h-[18px] w-[18px]" />
+          <Trash2 className="h-4.5 w-4.5" />
         </button>
       </AlertDialogTrigger>
 
@@ -292,10 +292,10 @@ const getTypeMeta = (type?: string) =>
   type === "course_plan"
     ? {
         label: "Course Plan",
-        chip: "bg-purple-100 text-purple-700",
+        chip: "bg-yellow-100 text-yellow-800",
         icon: Calendar,
       }
-    : { label: "Receipt", chip: "bg-blue-100 text-blue-700", icon: FileText };
+    : { label: "Receipt", chip: "bg-pink-100 text-pink-700", icon: FileText };
 
 function FileCard({
   file,
@@ -355,11 +355,11 @@ function FileCard({
 
       <div className="px-3 pb-3 flex items-center justify-end gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
         <ActionIconButton title="Export PDF" onClick={() => onDownload(file)}>
-          <Download className="h-[18px] w-[18px]" />
+          <Download className="h-4.5 w-4.5" />
         </ActionIconButton>
 
         <ActionIconButton title="Duplicate" onClick={() => onDuplicate(file)}>
-          <Copy className="h-[18px] w-[18px]" />
+          <Copy className="h-4.5 w-4.5" />
         </ActionIconButton>
 
         <DeleteConfirm onConfirm={() => onDelete(file.id)} />
@@ -428,11 +428,11 @@ function FileRow({
         onClick={(e) => e.stopPropagation()}
       >
         <ActionIconButton title="Export PDF" onClick={() => onDownload(file)}>
-          <Download className="h-[18px] w-[18px]" />
+          <Download className="h-4.5 w-4.5" />
         </ActionIconButton>
 
         <ActionIconButton title="Duplicate" onClick={() => onDuplicate(file)}>
-          <Copy className="h-[18px] w-[18px]" />
+          <Copy className="h-4.5 w-4.5" />
         </ActionIconButton>
 
         <DeleteConfirm onConfirm={() => onDelete(file.id)} />
@@ -484,13 +484,13 @@ function FileExplorer({
   }, [files, search]);
 
   return (
-    <div className="p-8 overflow-hidden">
+    <div className="m-8 overflow-hidden">
       <Pill onWheel={forwardWheelToScroll} className="flex items-center gap-2">
         <button
           onClick={onNewEntry}
-          className="px-3 py-2 bg-sky-950 cursor-pointer flex items-center gap-2 rounded-lg text-white hover:bg-sky-950/85 transition"
+          className="px-3 py-2 bg-sky-500 cursor-pointer flex items-center gap-2 rounded-lg text-white hover:opacity-85 transition"
         >
-          <Plus /> Add New PDF
+          <Plus /> Create New PDF
         </button>
 
         <div className="relative">
@@ -509,7 +509,7 @@ function FileExplorer({
             onClick={() => setViewMode("grid")}
             className={`h-8 w-8 grid place-items-center rounded-lg transition active:scale-95 cursor-pointer ${
               viewMode === "grid"
-                ? "bg-gray-900/5 text-blue-600"
+                ? "bg-gray-900/5 text-green-700"
                 : "text-gray-700 hover:bg-gray-900/5"
             }`}
             title="Grid"
@@ -521,7 +521,7 @@ function FileExplorer({
             onClick={() => setViewMode("list")}
             className={`h-8 w-8 grid place-items-center rounded-lg transition active:scale-95 cursor-pointer ${
               viewMode === "list"
-                ? "bg-gray-900/5 text-blue-600"
+                ? "bg-gray-900/5 text-green-700"
                 : "text-gray-700 hover:bg-gray-900/5"
             }`}
             title="List"
@@ -842,7 +842,7 @@ export function EntriesWorkspace({
           onDownload={(file) => openFromFile(file, { autoExport: true })}
         />
       ) : (
-        <div className="bg-white h-full overflow-hidden relative">
+        <div className="h-full overflow-hidden relative">
           {/* REMOVED: Top bar <Pill> is now gone. Unified toolbar is inside DocumentEditor. */}
           {renderEditor()}
         </div>
@@ -867,20 +867,20 @@ export function EntriesWorkspace({
           <div className="flex gap-4 py-4 justify-center">
             <button
               onClick={() => createEntry("receipt")}
-              className="flex flex-col items-center justify-center p-6 bg-gray-50 border border-dashed border-gray-300 hover:border-blue-500 hover:bg-blue-50 rounded-lg transition-all w-36 h-36 group cursor-pointer"
+              className="flex flex-col items-center justify-center p-6 bg-gray-50 border border-dashed border-gray-300 hover:border-pink-500 hover:bg-pink-50 rounded-lg transition-all w-36 h-36 group cursor-pointer"
             >
-              <FileText className="w-8 h-8 text-gray-400 group-hover:text-blue-600 mb-2" />
-              <span className="text-sm font-medium text-gray-700 group-hover:text-blue-700">
+              <FileText className="w-8 h-8 text-gray-400 group-hover:text-pink-500 mb-2" />
+              <span className="text-sm font-medium text-gray-700 group-hover:text-pink-500">
                 Receipt
               </span>
             </button>
 
             <button
               onClick={() => createEntry("course_plan")}
-              className="flex flex-col items-center justify-center p-6 bg-gray-50 border border-dashed border-gray-300 hover:border-purple-500 hover:bg-purple-50 rounded-lg transition-all w-36 h-36 group cursor-pointer"
+              className="flex flex-col items-center justify-center p-6 bg-gray-50 border border-dashed border-gray-300 hover:border-yellow-500 hover:bg-yellow-50 rounded-lg transition-all w-36 h-36 group cursor-pointer"
             >
-              <Calendar className="w-8 h-8 text-gray-400 group-hover:text-purple-600 mb-2" />
-              <span className="text-sm font-medium text-gray-700 group-hover:text-purple-700">
+              <Calendar className="w-8 h-8 text-gray-400 group-hover:text-yellow-500 mb-2" />
+              <span className="text-sm font-medium text-gray-700 group-hover:text-yellow-500">
                 Course Plan
               </span>
             </button>

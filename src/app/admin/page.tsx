@@ -10,6 +10,7 @@ import EnrollmentTab from "@/components/dashboard/EnrollmentTab";
 import RequestsTab from "@/components/dashboard/RequestsTab";
 import PDFTab from "@/components/dashboard/PDFTab";
 import { AdminDataHook } from "@/types";
+import logo from "@/assets/logo.png";
 
 export default function AdminDashboard() {
   const {
@@ -49,10 +50,18 @@ export default function AdminDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <nav className="z-100 fixed top-0 w-full px-8 h-20 flex justify-between items-center bg-sky-950 text-white">
-        <h1 className="text-2xl font-bold">Siuroma Kids Admin Dashboard</h1>
-        <div className="text-xl flex gap-5 font-medium">
+    <div className="min-h-screen bg-gray-50 font-sans">
+      <nav className="z-100 fixed top-0 w-full px-8 h-20 flex justify-between items-center bg-white border-b shadow-lg">
+        <div className="flex gap-5 items-center cursor-pointer">
+          <img
+            src={logo.src}
+            alt="Logo"
+            className="h-15 w-auto object-contain"
+            crossOrigin="anonymous"
+          />
+          <h1 className="text-2xl font-semibold">Admin Panel</h1>
+        </div>
+        <div className="text-xl flex gap-5">
           <button
             onClick={() => setActiveTab("TIMETABLE")}
             className="cursor-pointer hover:opacity-80 transition"

@@ -348,7 +348,7 @@ function DocumentRibbon({
         />
 
         {isOpen && suggestions.length > 0 && (
-          <div className="absolute top-full left-0 mt-2 w-full bg-white rounded-xl shadow-lg border border-gray-100 max-h-64 overflow-y-auto z-[9999]">
+          <div className="absolute top-full left-0 mt-2 w-full bg-white rounded-xl shadow-lg border border-gray-100 max-h-64 overflow-y-auto z-9999">
             {suggestions.map((id) => (
               <button
                 key={id}
@@ -381,9 +381,15 @@ function DocumentRibbon({
         type="button"
         onClick={handleGenerate}
         disabled={!canGenerate || isLoading}
-        className="h-9 rounded-lg bg-sky-950 text-white px-3 text-xs font-semibold disabled:opacity-50 hover:bg-sky-900 transition-all active:scale-[0.98] cursor-pointer"
+        className="h-9 w-20 rounded-lg bg-sky-950 text-white px-3 text-xs font-semibold disabled:opacity-50 hover:bg-sky-900 transition-all active:scale-[0.98] cursor-pointer"
       >
-        {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : "Generate"}
+        {isLoading ? (
+          <div className="w-full flex items-center justify-center">
+            <Loader2 className="w-3 h-3 animate-spin" />
+          </div>
+        ) : (
+          "Generate"
+        )}
       </button>
 
       <IconAction
@@ -635,9 +641,9 @@ export function DocumentEditor({
 
   return (
     <DocumentContext.Provider value={contextValue}>
-      <div className="flex flex-col h-screen overflow-hidden bg-gray-50/50 text-neutral-900 relative">
+      <div className="flex flex-col overflow-hidden bg-gray-50/50 text-neutral-900">
         {/* UNIFIED TOOLBAR: Sticky and centralized */}
-        <div className="absolute top-4 left-0 right-0 z-50 flex justify-center pointer-events-none">
+        <div className="fixed top-25 left-0 right-0 z-50 flex justify-center pointer-events-none">
           <Pill className="pointer-events-auto flex items-center gap-1 p-1.5 pr-2 bg-white/90 backdrop-blur shadow-sm border border-gray-200/60">
             {/* Left: Back & Status */}
             {onBack && (
