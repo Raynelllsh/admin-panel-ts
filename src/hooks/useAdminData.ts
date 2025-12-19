@@ -225,7 +225,9 @@ export function useAdminData() {
           const data = snap.data();
           const docId = snap.id;
           const match = docId.match(/(.*)(round\d+)$/);
-          const parsedName = match ? match[1] : docId;
+          const parsedName = match 
+            ? match[1].replace(/_$/, "") 
+            : docId;
           const parsedRound = match ? match[2] : "round001";
 
           const sanitizedLessons: Lesson[] = (data.lessons || []).map(
@@ -343,7 +345,7 @@ export function useAdminData() {
 
   // --- ACTIONS ---\
 
-  const createCourse = async (
+    const createCourse = async (
     name: string,
     time: string,
     date: string,
@@ -361,7 +363,12 @@ export function useAdminData() {
     const roundName = roundNumber.startsWith("round")
       ? roundNumber
       : "round" + String(roundNumber).padStart(3, "0");
-    const compositeId = name + roundName;
+
+    // ▼▼▼ CHANGED LINE ▼▼▼
+    // Was: const compositeId = name + roundName;
+    const compositeId = `${name}_${roundName}`; 
+    // Result: "SPEC_C004_round001"
+    // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
 
     const newCourse: Course = {
       id: compositeId,
@@ -383,6 +390,7 @@ export function useAdminData() {
     await saveCourseToFirebase(newCourse);
     return category;
   };
+
 
   const deleteCourse = async (courseId: string) => {
     try {
