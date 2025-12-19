@@ -9,18 +9,9 @@ import { Course, Student, PersonalInfo } from "@/types";
 interface EnrollmentTabProps {
   allStudents: Student[];
   allCourses: Course[];
-<<<<<<< HEAD
-  // If you are using local state update for students in parent, keep this:
-  setAllStudents?: React.Dispatch<React.SetStateAction<Student[]>>;
-  onEnroll: (courseId: string, studentId: string) => Promise<{ success: boolean; msg?: string }>;
-  onReschedule?: any; // Keeping for interface compatibility if needed
-=======
   setAllStudents: React.Dispatch<React.SetStateAction<Student[]>>;
-  enrollStudentToCourse: (
-    courseId: string,
-    studentId: string
-  ) => Promise<{ success: boolean; msg?: string }>;
->>>>>>> build-enrollment
+  enrollStudentToCourse: (courseId: string, studentId: string) => Promise<{ success: boolean; msg?: string }>;
+  onEnroll: (courseId: string, studentId: string) => Promise<{ success: boolean; msg?: string }>;
 }
 
 export default function EnrollmentTab({
@@ -125,42 +116,28 @@ export default function EnrollmentTab({
           parentName: enrollParentName,
           parentContact: enrollParentContact,
         };
-
         const newStudent: Student = {
           id: enrollId,
           name: enrollName,
           personalInfo: newPersonalInfo,
           enrollment: [],
         };
-<<<<<<< HEAD
-=======
-
-        await setDoc(studentRef, newStudent);
->>>>>>> build-enrollment
-
-        // Save to Firebase
-        await setDoc(doc(db, "students", enrollId), newStudent);
         
-        // Update local state if setter provided
-        if (setAllStudents) {
-          setAllStudents((prev) => [...prev, newStudent]);
-        }
+        const studentRef = doc(db, "students", enrollId);
+        await setDoc(studentRef, newStudent);
+        await setDoc(studentRef, newStudent);
+
+        // Optimistically add to local list
+        setAllStudents((prev) => [...prev, newStudent]);
       }
 
       // 3. Enroll (API Call)
       const result = await onEnroll(targetCourseId, enrollId);
 
       if (result.success) {
-<<<<<<< HEAD
-        setStatusMsg(`Successfully enrolled ${enrollName} into ${targetCourseId}`);
+        setStatusMsg(`Success! ${enrollName} enrolled in ${courseInput}.`);
         setStatusType("success");
-        // Clear inputs? Maybe keep them for rapid entry, just clear student ID
-=======
-        setEnrollmentStatus(
-          `Success! ${enrollName} enrolled in ${enrollCourse}.`
-        );
         // Reset Form
->>>>>>> build-enrollment
         setEnrollId("");
         setEnrollName("");
         setIsExistingStudent(false);
@@ -177,38 +154,19 @@ export default function EnrollmentTab({
   };
 
   return (
-<<<<<<< HEAD
-    <div className="mx-auto max-w-4xl space-y-6">
-      <div className="rounded-lg bg-white p-6 shadow">
-        <h2 className="mb-4 text-xl font-bold text-gray-800">
-          Manual Enrollment
-        </h2>
-        
-        <form onSubmit={handleEnroll} className="space-y-6">
-          
-          {/* --- SECTION 1: IDENTIFIERS --- */}
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            <div>
-              <label className="mb-1 block text-sm font-semibold text-gray-700">
-                Student ID
-=======
-    <div className="p-8">
+    <div className="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-md">
       <h2 className="text-2xl font-bold mb-6 text-gray-800 border-b pb-2">
-        Enroll New Student
+        New Student Enrollment
       </h2>
 
-      <form onSubmit={handleEnrollStudent} className="space-y-6">
+      <form onSubmit={handleEnroll} className="space-y-6">
+        
         {/* SECTION 1: IDENTITY */}
-        <div>
-          <h3 className="text-md font-semibold text-sky-950 mb-3">
-            Student Identity
-          </h3>
+        <div className="bg-gray-50 p-4 rounded-md border border-gray-100">
+          <h3 className="text-md font-semibold text-blue-800 mb-3">Student Identity</h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Student ID *
->>>>>>> build-enrollment
-              </label>
+              <label className="block text-sm font-medium text-gray-700">Student ID *</label>
               <input
                 type="text"
                 value={enrollId}
@@ -227,14 +185,7 @@ export default function EnrollmentTab({
             </div>
 
             <div>
-<<<<<<< HEAD
-              <label className="mb-1 block text-sm font-semibold text-gray-700">
-                Course Name / ID
-=======
-              <label className="block text-sm font-medium text-gray-700">
-                English Name *
->>>>>>> build-enrollment
-              </label>
+              <label className="block text-sm font-medium text-gray-700">English Name *</label>
               <input
                 type="text"
                 value={courseInput}
@@ -244,12 +195,9 @@ export default function EnrollmentTab({
                 required
               />
             </div>
-<<<<<<< HEAD
 
             <div>
-              <label className="mb-1 block text-sm font-semibold text-gray-700">
-                Round ID
-              </label>
+              <label className="block text-sm font-medium text-gray-700">Chinese Name</label>
               <input
                 type="text"
                 value={roundInput}
@@ -258,25 +206,12 @@ export default function EnrollmentTab({
                 placeholder="e.g. round001"
                 required
               />
-=======
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Chinese Name
-              </label>
-              <input
-                className="mt-1 block w-full border border-gray-300 rounded-md p-2"
-                value={enrollChiName}
-                onChange={(e) => setEnrollChiName(e.target.value)}
-                placeholder="Optional"
-              />
             </div>
           </div>
 
           <div className="grid grid-cols-3 md:grid-cols-3 gap-4 mt-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Gender
-              </label>
+             <div>
+              <label className="block text-sm font-medium text-gray-700">Gender</label>
               <select
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                 value={enrollSex}
@@ -287,9 +222,7 @@ export default function EnrollmentTab({
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Level
-              </label>
+              <label className="block text-sm font-medium text-gray-700">Level</label>
               <select
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                 value={enrollLevel}
@@ -301,10 +234,8 @@ export default function EnrollmentTab({
                 <option value="P1">P1</option>
               </select>
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Language
-              </label>
+             <div>
+              <label className="block text-sm font-medium text-gray-700">Language</label>
               <select
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                 value={enrollLang}
@@ -319,15 +250,11 @@ export default function EnrollmentTab({
         </div>
 
         {/* SECTION 2: PERSONAL & MEDICAL */}
-        <div>
-          <h3 className="text-md font-semibold text-sky-950 mb-3">
-            Personal & Medical Details
-          </h3>
+        <div className="bg-gray-50 p-4 rounded-md border border-gray-100">
+          <h3 className="text-md font-semibold text-blue-800 mb-3">Personal & Medical Details</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Allergies
-              </label>
+              <label className="block text-sm font-medium text-gray-700">Allergies</label>
               <input
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                 value={enrollAllergies}
@@ -336,9 +263,7 @@ export default function EnrollmentTab({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Special Conditions
-              </label>
+              <label className="block text-sm font-medium text-gray-700">Special Conditions</label>
               <input
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                 value={enrollCondition}
@@ -347,9 +272,7 @@ export default function EnrollmentTab({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Favorite Character
-              </label>
+              <label className="block text-sm font-medium text-gray-700">Favorite Character</label>
               <input
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                 value={enrollFavChar}
@@ -358,9 +281,7 @@ export default function EnrollmentTab({
               />
             </div>
             <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Comfort Method
-              </label>
+              <label className="block text-sm font-medium text-gray-700">Comfort Method</label>
               <input
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                 value={enrollComfort}
@@ -372,15 +293,11 @@ export default function EnrollmentTab({
         </div>
 
         {/* SECTION 3: PARENT INFO */}
-        <div>
-          <h3 className="text-md font-semibold text-sky-950 mb-3">
-            Parent / Guardian Information
-          </h3>
+        <div className="bg-gray-50 p-4 rounded-md border border-gray-100">
+          <h3 className="text-md font-semibold text-blue-800 mb-3">Parent / Guardian Information</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Parent Name
-              </label>
+              <label className="block text-sm font-medium text-gray-700">Parent Name</label>
               <input
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                 value={enrollParentName}
@@ -389,9 +306,7 @@ export default function EnrollmentTab({
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Contact Number
-              </label>
+              <label className="block text-sm font-medium text-gray-700">Contact Number</label>
               <input
                 className="mt-1 block w-full border border-gray-300 rounded-md p-2"
                 value={enrollParentContact}
@@ -404,149 +319,53 @@ export default function EnrollmentTab({
 
         {/* SECTION 4: COURSE SELECTION */}
         <div className="border-t pt-4 mt-2">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">
-            Select Course
-          </h3>
+          <h3 className="text-lg font-bold text-gray-900 mb-4">Select Course</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Course Name
-              </label>
-              <select
-                className="block w-full border border-gray-300 rounded-md p-3 focus:ring-sky-500 focus:border-sky-500"
-                value={enrollCourse}
-                onChange={(e) => {
-                  setEnrollCourse(e.target.value);
-                  setEnrollRound("");
-                }}
+              <label className="block text-sm font-medium text-gray-700 mb-1">Course Name</label>
+              <input
+                type="text"
+                className="block w-full border border-gray-300 rounded-md p-3 focus:ring-blue-500 focus:border-blue-500"
+                value={courseInput}
+                onChange={(e) => setCourseInput(e.target.value)}
+                placeholder="e.g. English"
                 required
-              >
-                <option value="">-- Select Course --</option>
-                {availableCourses.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Round / Iteration
-              </label>
-              <select
-                className="block w-full border border-gray-300 rounded-md p-3 focus:ring-sky-500 focus:border-sky-500"
-                value={enrollRound}
-                onChange={(e) => setEnrollRound(e.target.value)}
+              <label className="block text-sm font-medium text-gray-700 mb-1">Round / Iteration</label>
+              <input
+                type="text"
+                className="block w-full border border-gray-300 rounded-md p-3 focus:ring-blue-500 focus:border-blue-500"
+                value={roundInput}
+                onChange={(e) => setRoundInput(e.target.value)}
+                placeholder="e.g. round001"
                 required
-                disabled={!enrollCourse}
-              >
-                <option value="">-- Select Round --</option>
-                {availableRoundsForSelectedCourse.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
->>>>>>> build-enrollment
+              />
             </div>
           </div>
+        </div>
 
-<<<<<<< HEAD
-          {/* --- SECTION 2: NEW STUDENT DETAILS (Conditional) --- */}
-          {!isExistingStudent && enrollId && (
-            <div className="rounded-lg border-2 border-dashed border-amber-200 bg-amber-50 p-4">
-              <h3 className="mb-3 font-semibold text-amber-800">New Student Details</h3>
-              
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600">Full Name *</label>
-                  <input
-                    type="text"
-                    value={enrollName}
-                    onChange={(e) => setEnrollName(e.target.value)}
-                    className="mt-1 w-full rounded border p-2 text-sm"
-                    placeholder="Student Name"
-                    required={!isExistingStudent}
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600">Chinese Name</label>
-                  <input
-                    type="text"
-                    value={enrollChiName}
-                    onChange={(e) => setEnrollChiName(e.target.value)}
-                    className="mt-1 w-full rounded border p-2 text-sm"
-                    placeholder="Optional"
-                  />
-                </div>
-                <div>
-                   <label className="block text-xs font-medium text-gray-600">Level</label>
-                   <select 
-                      value={enrollLevel} 
-                      onChange={(e) => setEnrollLevel(e.target.value)}
-                      className="mt-1 w-full rounded border p-2 text-sm"
-                   >
-                      <option value="K1">K1</option>
-                      <option value="K2">K2</option>
-                      <option value="K3">K3</option>
-                      <option value="P1">P1</option>
-                   </select>
-                </div>
-                <div>
-                   <label className="block text-xs font-medium text-gray-600">Sex</label>
-                   <select 
-                      value={enrollSex} 
-                      onChange={(e) => setEnrollSex(e.target.value)}
-                      className="mt-1 w-full rounded border p-2 text-sm"
-                   >
-                      <option value="M">Male</option>
-                      <option value="F">Female</option>
-                   </select>
-                </div>
-                {/* Expand other fields if necessary, kept minimal for "Quick" feel */}
-                <div className="md:col-span-2">
-                    <label className="block text-xs font-medium text-gray-600">Parent Contact</label>
-                    <input
-                        type="text"
-                        value={enrollParentContact}
-                        onChange={(e) => setEnrollParentContact(e.target.value)}
-                        className="mt-1 w-full rounded border p-2 text-sm"
-                        placeholder="Phone Number"
-                    />
-                </div>
-              </div>
-            </div>
-          )}
-=======
         {/* SUBMIT BUTTON */}
         <button
           type="submit"
-          className="w-full bg-sky-950 text-white font-bold py-3 px-4 rounded-lg hover:opacity-85 transition duration-150 ease-in-out mt-4 cursor-pointer"
+          className="w-full bg-blue-600 text-white font-bold py-3 px-4 rounded hover:bg-blue-700 transition duration-150 ease-in-out shadow-lg mt-4"
         >
           Enroll Student
         </button>
->>>>>>> build-enrollment
-
-          {/* --- SUBMIT --- */}
-          <div className="flex items-center justify-end space-x-4">
-             {statusMsg && (
-                <span className={`text-sm font-medium ${
-                    statusType === "success" ? "text-green-600" : 
-                    statusType === "error" ? "text-red-600" : "text-gray-600"
-                }`}>
-                    {statusMsg}
-                </span>
-             )}
-            <button
-              type="submit"
-              className="rounded-lg bg-blue-600 px-6 py-2 font-semibold text-white transition hover:bg-blue-700 shadow-sm"
-            >
-              {isExistingStudent ? "Enroll Existing Student" : "Create & Enroll Student"}
-            </button>
+        {/* STATUS MESSAGE */}
+        {statusMsg && (
+          <div
+            className={`p-4 rounded text-center font-medium ${
+              statusType === "success"
+                ? "bg-green-100 text-green-800 border border-green-200"
+                : "bg-red-100 text-red-800 border border-red-200"
+            }`}
+          >
+            {statusMsg}
           </div>
-
-        </form>
-      </div>
+        )}
+      </form>
     </div>
   );
 }

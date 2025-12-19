@@ -1,7 +1,5 @@
 "use client";
 
-import "./PDFTab.css";
-
 import {
   Section,
   Stack,

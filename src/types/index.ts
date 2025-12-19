@@ -93,7 +93,6 @@ export interface AdminDataHook {
   availableCategories: string[];
   availableRounds: string[];
 
-<<<<<<< HEAD
   // --- NEW: Added Requests & Handler ---
   requests: LessonChangeRequest[];
   handleRequest: (
@@ -102,10 +101,6 @@ export interface AdminDataHook {
   ) => Promise<void>;
 
   // Existing Actions
-  createCourse: (name: string, time: string, date: string, roundNum: string) => Promise<string>;
-  
-=======
-  // Must return Promise<string> to satisfy TimetableTab
   createCourse: (
     name: string,
     time: string,
@@ -113,7 +108,6 @@ export interface AdminDataHook {
     roundNum: string
   ) => Promise<string>;
 
->>>>>>> build-enrollment
   deleteCourse: (courseId: string) => Promise<void>;
 
   addStudentToLesson: (
@@ -133,12 +127,9 @@ export interface AdminDataHook {
     lessonId: string,
     isComplete: boolean
   ) => Promise<void>;
-<<<<<<< HEAD
   
-=======
 
   // Must have 3 arguments to match useAdminData implementation
->>>>>>> build-enrollment
   shiftCourseDates: (
     courseId: string,
     startLessonId: string,
