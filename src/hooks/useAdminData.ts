@@ -11,6 +11,9 @@ import {
   getDocs,
   updateDoc,
   deleteDoc,
+  query, // NEW
+  where, // NEW
+  onSnapshot, // NEW
 } from "firebase/firestore";
 import {
   DEFAULT_LESSON_NAMES,
@@ -20,15 +23,50 @@ import {
 } from "@/utils/adminConstants";
 import { Course, Student, Lesson, StudentLesson, AdminDataHook } from "@/types";
 
+// --- NEW INTERFACE FOR REQUESTS ---
+// (You can move this to @/types/index.ts later if you prefer)
+export interface LessonChangeRequest {
+  id: string;
+  studentId: string;
+  studentName: string;
+  courseCode: string;
+  courseName: string;
+  reason: string;
+  status: "pending" | "approved" | "rejected";
+  submitTime: string;
+  makeupOption: string;
+  lesson: {
+    courseId: string;
+    dateStr: string;
+    id: number | string;
+    name: string;
+    timeSlot: string;
+  };
+  selectedTimeSlot: {
+    courseId: string;
+    date: string;
+    lessonId: string;
+    name: string;
+    time: string;
+  };
+}
+
 // Helper Interface for payload handling
 type SyncAction = "enroll_course" | "add_lesson" | "remove_lesson";
-type SyncPayload = StudentLesson[] | StudentLesson | { courseId: string; id: string | number };
+type SyncPayload =
+  | StudentLesson[]
+  | StudentLesson
+  | { courseId: string; id: string | number };
 
-export function useAdminData(): AdminDataHook {
+export function useAdminData() {
+  // Removed explicit return type temporarily to avoid interface errors until you update types.ts
   // --- GLOBAL STATE ---
   const [allCourses, setAllCourses] = useState<Course[]>([]);
   const [allStudents, setAllStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // --- NEW STATE: REQUESTS ---
+  const [requests, setRequests] = useState<LessonChangeRequest[]>([]);
 
   // --- FILTER STATE ---
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
@@ -38,11 +76,13 @@ export function useAdminData(): AdminDataHook {
   const saveCourseToFirebase = async (course: Course) => {
     try {
       const category = course.path?.category || "Uncategorized";
+      // Include 'students' array in the saved data
       const lessonsToSave = course.lessons.map((l) => ({
         id: l.id,
         name: l.name,
         dateStr: l.dateStr,
         completed: l.completed || false,
+        students: l.students || [], // Persist student list in course doc
       }));
 
       const docId = course.id;
@@ -60,7 +100,11 @@ export function useAdminData(): AdminDataHook {
   };
 
   // --- HELPER: Sync Student Profile ---
-  const syncStudentProfile = async (studentCode: string, action: SyncAction, payload: SyncPayload) => {
+  const syncStudentProfile = async (
+    studentCode: string,
+    action: SyncAction,
+    payload: SyncPayload
+  ) => {
     try {
       const studentRef = doc(db, "students", studentCode);
       const studentSnap = await getDoc(studentRef);
@@ -78,12 +122,11 @@ export function useAdminData(): AdminDataHook {
 
       currentArray.forEach((item: any) => {
         const fallbackId = (item.courseName || "") + (item.round || "");
-
         if (item.lessons && Array.isArray(item.lessons)) {
           flatEnrollment.push(
             ...item.lessons.map((l: any) => ({
               id: String(l.id),
-              lessonId: String(l.id), // FIX: Explicitly assign lessonId
+              lessonId: String(l.id),
               name: l.name,
               dateStr: l.dateStr,
               timeSlot: l.timeSlot || "",
@@ -95,15 +138,16 @@ export function useAdminData(): AdminDataHook {
           flatEnrollment.push({
             ...item,
             id: String(item.id),
-            lessonId: String(item.id), // FIX: Explicitly assign lessonId
+            lessonId: String(item.id),
             courseId: item.courseId || item.actualCourseId || fallbackId,
           });
         }
       });
 
       // 2. Perform Action
-      const getKey = (l: StudentLesson | { courseId: string; id: string | number }) =>
-        `${l.courseId}_${l.id || (l as any).lessonId}`;
+      const getKey = (
+        l: StudentLesson | { courseId: string; id: string | number }
+      ) => `${l.courseId}_${l.id || (l as any).lessonId}`;
 
       if (action === "enroll_course") {
         const newLessons = payload as StudentLesson[];
@@ -112,15 +156,21 @@ export function useAdminData(): AdminDataHook {
         flatEnrollment.push(...newLessons);
       } else if (action === "add_lesson") {
         const newLesson = payload as StudentLesson;
-        flatEnrollment = flatEnrollment.filter((l) => getKey(l) !== getKey(newLesson));
+        flatEnrollment = flatEnrollment.filter(
+          (l) => getKey(l) !== getKey(newLesson)
+        );
         flatEnrollment.push(newLesson);
       } else if (action === "remove_lesson") {
         const target = payload as { courseId: string; id: string };
-        flatEnrollment = flatEnrollment.filter((l) => getKey(l) !== getKey(target));
+        flatEnrollment = flatEnrollment.filter(
+          (l) => getKey(l) !== getKey(target)
+        );
       }
 
       // 3. Sort & Save
-      flatEnrollment.sort((a, b) => a.dateStr.localeCompare(b.dateStr));
+      flatEnrollment.sort(
+        (a, b) => a.dateStr?.localeCompare(b.dateStr || "") || 0
+      );
 
       await updateDoc(studentRef, {
         enrollment: flatEnrollment,
@@ -138,7 +188,30 @@ export function useAdminData(): AdminDataHook {
     }
   };
 
-  // --- LOAD DATA ---
+  // --- NEW LISTENER: Fetch Requests (Real-time) ---
+  useEffect(() => {
+    const q = query(
+      collection(db, "requests"),
+      where("status", "==", "pending")
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const reqs: LessonChangeRequest[] = [];
+      snapshot.forEach((doc) => {
+        reqs.push({ id: doc.id, ...doc.data() } as LessonChangeRequest);
+      });
+      // Sort by submit time (newest first)
+      reqs.sort(
+        (a, b) =>
+          new Date(b.submitTime).getTime() - new Date(a.submitTime).getTime()
+      );
+      setRequests(reqs);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // --- LOAD INITIAL DATA ---
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -151,18 +224,19 @@ export function useAdminData(): AdminDataHook {
         coursesSnap.forEach((snap) => {
           const data = snap.data();
           const docId = snap.id;
-
           const match = docId.match(/(.*)(round\d+)$/);
           const parsedName = match ? match[1] : docId;
           const parsedRound = match ? match[2] : "round001";
 
-          const sanitizedLessons: Lesson[] = (data.lessons || []).map((l: any) => ({
-            id: String(l.id),
-            name: l.name,
-            dateStr: l.dateStr,
-            completed: !!l.completed,
-            students: [],
-          }));
+          const sanitizedLessons: Lesson[] = (data.lessons || []).map(
+            (l: any) => ({
+              id: String(l.id),
+              name: l.name,
+              dateStr: l.dateStr,
+              completed: !!l.completed,
+              students: l.students || [], // Load students from DB
+            })
+          );
 
           loadedCourses.push({
             id: docId,
@@ -178,7 +252,7 @@ export function useAdminData(): AdminDataHook {
 
         loadedCourses.sort((a, b) => a.name.localeCompare(b.name));
 
-        // 2. Load Students
+        // 2. Load Students & Hydrate
         const studentsSnapshot = await getDocs(collection(db, "students"));
         const loadedStudents: Student[] = [];
 
@@ -188,7 +262,6 @@ export function useAdminData(): AdminDataHook {
           let finalEnrollment: StudentLesson[] = [];
 
           const raw = studentData.enrollment;
-
           if (raw) {
             const list = Array.isArray(raw) ? raw : Object.values(raw);
             list.forEach((item: any) => {
@@ -196,17 +269,22 @@ export function useAdminData(): AdminDataHook {
                 item.courseId ||
                 item.actualCourseId ||
                 (item.courseName || "") + (item.round || "");
-              
-              const lId = String(item.id);
+              const lId = String(item.id || item.lessonId);
+
+              // Hydration: Get details from course definition
+              const sourceCourse = loadedCourses.find((c) => c.id === cId);
+              const sourceLesson = sourceCourse?.lessons.find(
+                (l) => l.id === lId
+              );
 
               finalEnrollment.push({
                 id: lId,
-                lessonId: lId, // FIX: Ensure lessonId is populated
-                name: item.name,
-                dateStr: item.dateStr,
-                timeSlot: item.timeSlot,
-                completed: item.completed,
+                lessonId: lId,
                 courseId: cId || "Unknown",
+                name: sourceLesson?.name || item.name || "Unknown Lesson",
+                dateStr: sourceLesson?.dateStr || item.dateStr || "",
+                timeSlot: sourceCourse?.timeSlot || item.timeSlot || "",
+                completed: item.completed || false,
               });
             });
           }
@@ -221,7 +299,7 @@ export function useAdminData(): AdminDataHook {
 
         loadedStudents.sort((a, b) => a.id.localeCompare(b.id));
 
-        // 3. Populate Timetable
+        // 3. Populate Timetable (Reverse sync check)
         loadedStudents.forEach((student) => {
           student.enrollment.forEach((enrollmentItem) => {
             const targetCourse = loadedCourses.find(
@@ -263,9 +341,14 @@ export function useAdminData(): AdminDataHook {
     fetchData();
   }, []);
 
-  // --- ACTIONS ---
+  // --- ACTIONS ---\
 
-  const createCourse = async (name: string, time: string, date: string, roundNumber: string): Promise<string> => {
+  const createCourse = async (
+    name: string,
+    time: string,
+    date: string,
+    roundNumber: string
+  ): Promise<string> => {
     const lessons: Lesson[] = Array.from({ length: 12 }, (_, i) => ({
       id: String(i + 1),
       name: DEFAULT_LESSON_NAMES[i],
@@ -275,7 +358,9 @@ export function useAdminData(): AdminDataHook {
     }));
 
     const category = getCategoryFromId(name);
-    const roundName = "round" + String(roundNumber).padStart(3, "0");
+    const roundName = roundNumber.startsWith("round")
+      ? roundNumber
+      : "round" + String(roundNumber).padStart(3, "0");
     const compositeId = name + roundName;
 
     const newCourse: Course = {
@@ -312,109 +397,125 @@ export function useAdminData(): AdminDataHook {
     const course = allCourses.find((c) => c.id === courseId);
     if (!course) return { success: false, msg: "Course not found" };
 
-    const lessonsForStudent: StudentLesson[] = course.lessons.map((l) => ({
-      completed: false,
-      courseId: course.id,
-      dateStr: l.dateStr,
-      lessonId: l.id,
-      id: l.id,
-      name: l.name,
-      timeSlot: course.timeSlot,
-    }));
+    const lessonsForStudent: StudentLesson[] = course.lessons.map(
+      (l) =>
+        ({
+          completed: false,
+          courseId: course.id,
+          lessonId: l.id,
+          id: l.id,
+        } as StudentLesson)
+    );
 
     await syncStudentProfile(studentId, "enroll_course", lessonsForStudent);
 
+    const updatedCourse = {
+      ...course,
+      lessons: course.lessons.map((l) => ({
+        ...l,
+        students: [...new Set([...l.students, studentId])],
+      })),
+    };
+
     setAllCourses((prev) =>
-      prev.map((c) => {
-        if (c.id === courseId) {
-          return {
-            ...c,
-            lessons: c.lessons.map((l) => ({
-              ...l,
-              students: [...new Set([...l.students, studentId])],
-            })),
-          };
-        }
-        return c;
-      })
+      prev.map((c) => (c.id === courseId ? updatedCourse : c))
     );
 
+    await saveCourseToFirebase(updatedCourse);
     return { success: true };
   };
 
-  const addStudentToLesson = async (courseId: string, lessonId: string, studentId: string) => {
+  const addStudentToLesson = async (
+    courseId: string,
+    lessonId: string,
+    studentId: string
+  ) => {
     const course = allCourses.find((c) => c.id === courseId);
     if (!course) return { success: false, msg: "Course not found" };
 
     const lesson = course.lessons.find((l) => l.id === lessonId);
     if (!lesson) return { success: false, msg: "Lesson not found" };
 
+    // 1. Check Capacity
     if (lesson.students.length >= MAX_STUDENTS)
       return { success: false, msg: "Class full" };
 
-    if (lesson.students.includes(studentId))
+    // 2. Strict Check for Existing Student (Robust against string/number mismatches)
+    const isAlreadyIn = lesson.students.some(
+      (id) => String(id) === String(studentId)
+    );
+    if (isAlreadyIn) {
       return { success: false, msg: "Already in lesson" };
+    }
 
     const lessonData: StudentLesson = {
       completed: false,
       courseId: course.id,
-      dateStr: lesson.dateStr,
       lessonId: lesson.id,
       id: lesson.id,
+      // Add other fields if needed for UI consistency (name, dateStr, etc.)
       name: lesson.name,
+      dateStr: lesson.dateStr,
       timeSlot: course.timeSlot,
-    };
+    } as StudentLesson;
 
     await syncStudentProfile(studentId, "add_lesson", lessonData);
 
+    // 3. Update Course State with Set to FORCE uniqueness
+    const updatedCourse = {
+      ...course,
+      lessons: course.lessons.map((l) =>
+        l.id === lessonId
+          ? { ...l, students: Array.from(new Set([...l.students, studentId])) } // <--- CHANGED: Uses Set
+          : l
+      ),
+    };
+
     setAllCourses((prev) =>
-      prev.map((c) => {
-        if (c.id === courseId) {
-          return {
-            ...c,
-            lessons: c.lessons.map((l) =>
-              l.id === lessonId
-                ? { ...l, students: [...l.students, studentId] }
-                : l
-            ),
-          };
-        }
-        return c;
-      })
+      prev.map((c) => (c.id === courseId ? updatedCourse : c))
     );
+
+    await saveCourseToFirebase(updatedCourse);
 
     return { success: true };
   };
 
-  const removeStudentFromLesson = async (courseId: string, lessonId: string, studentCode: string) => {
+  const removeStudentFromLesson = async (
+    courseId: string,
+    lessonId: string,
+    studentCode: string
+  ) => {
     const course = allCourses.find((c) => c.id === courseId);
     if (!course) return;
 
     const target = { courseId: course.id, id: lessonId };
-
     await syncStudentProfile(studentCode, "remove_lesson", target);
 
+    const updatedCourse = {
+      ...course,
+      lessons: course.lessons.map((l) =>
+        l.id === lessonId
+          ? { ...l, students: l.students.filter((s) => s !== studentCode) }
+          : l
+      ),
+    };
+
     setAllCourses((prev) =>
-      prev.map((c) => {
-        if (c.id === courseId) {
-          return {
-            ...c,
-            lessons: c.lessons.map((l) =>
-              l.id === lessonId
-                ? { ...l, students: l.students.filter((s) => s !== studentCode) }
-                : l
-            ),
-          };
-        }
-        return c;
-      })
+      prev.map((c) => (c.id === courseId ? updatedCourse : c))
     );
+
+    await saveCourseToFirebase(updatedCourse);
   };
 
   const rescheduleStudent = async (
     studentId: string,
     oldLesson: { courseId: string; lessonId: string },
-    newLesson: { courseId: string; lessonId: string; dateStr: string; timeSlot: string }
+    newLesson: {
+      courseId: string;
+      lessonId: string;
+      dateStr: string;
+      timeSlot: string;
+    }
   ) => {
     const oldCourseId = oldLesson.courseId;
     const oldLessonId = oldLesson.lessonId;
@@ -425,7 +526,6 @@ export function useAdminData(): AdminDataHook {
 
     const studentRef = doc(db, "students", studentId);
     const studentSnap = await getDoc(studentRef);
-
     if (!studentSnap.exists())
       return { success: false, msg: "Student not found" };
 
@@ -434,8 +534,7 @@ export function useAdminData(): AdminDataHook {
 
     updatedEnrollment = updatedEnrollment.map((enr: any) => {
       const enrId = String(enr.id);
-      const enrCourseId = enr.courseId || (enr.courseName + enr.round);
-
+      const enrCourseId = enr.courseId || enr.courseName + enr.round;
       if (enrCourseId === oldCourseId && enrId === oldLessonId) {
         return {
           ...enr,
@@ -455,9 +554,13 @@ export function useAdminData(): AdminDataHook {
       )
     );
 
+    let updatedOldCourse: Course | undefined;
+    let updatedNewCourse: Course | undefined;
+
     setAllCourses((prev) =>
       prev.map((course) => {
         let updatedLessons = course.lessons;
+        let isModified = false;
 
         if (course.id === oldCourseId) {
           updatedLessons = updatedLessons.map((l) =>
@@ -465,6 +568,7 @@ export function useAdminData(): AdminDataHook {
               ? { ...l, students: l.students.filter((id) => id !== studentId) }
               : l
           );
+          isModified = true;
         }
 
         if (course.id === newCourseId) {
@@ -473,16 +577,30 @@ export function useAdminData(): AdminDataHook {
               ? { ...l, students: [...new Set([...l.students, studentId])] }
               : l
           );
+          isModified = true;
         }
 
-        return { ...course, lessons: updatedLessons };
+        const newCourseObj = { ...course, lessons: updatedLessons };
+        if (course.id === oldCourseId) updatedOldCourse = newCourseObj;
+        if (course.id === newCourseId) updatedNewCourse = newCourseObj;
+
+        return isModified ? newCourseObj : course;
       })
     );
+
+    if (updatedOldCourse) await saveCourseToFirebase(updatedOldCourse);
+    if (updatedNewCourse && newCourseId !== oldCourseId) {
+      await saveCourseToFirebase(updatedNewCourse);
+    }
 
     return { success: true };
   };
 
-  const toggleLessonCompletion = async (courseId: string, lessonId: string, isComplete: boolean) => {
+  const toggleLessonCompletion = async (
+    courseId: string,
+    lessonId: string,
+    isComplete: boolean
+  ) => {
     const course = allCourses.find((c) => c.id === courseId);
     if (!course) return;
 
@@ -493,23 +611,29 @@ export function useAdminData(): AdminDataHook {
       ),
     };
 
-    setAllCourses((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+    setAllCourses((prev) =>
+      prev.map((c) => (c.id === updated.id ? updated : c))
+    );
     await saveCourseToFirebase(updated);
   };
 
-  // Fixed signature to accept startLessonId and numeric direction
-  const shiftCourseDates = async (courseId: string, startLessonId: string, direction: number) => {
+  const shiftCourseDates = async (
+    courseId: string,
+    startLessonId: string,
+    direction: number
+  ) => {
     const course = allCourses.find((c) => c.id === courseId);
     if (!course) return;
 
-    const startIndex = course.lessons.findIndex(l => l.id === startLessonId);
+    const startIndex = course.lessons.findIndex((l) => l.id === startLessonId);
     if (startIndex === -1) return;
 
-    // Shift dates for the start lesson and all subsequent lessons
     const updatedLessons = course.lessons.map((lesson, index) => {
       if (index >= startIndex) {
-        // Assume direction is in weeks (multiplier of 7)
-        return { ...lesson, dateStr: addDays(lesson.dateStr, direction * 7) };
+        return {
+          ...lesson,
+          dateStr: addDays(lesson.dateStr, direction * 7),
+        };
       }
       return lesson;
     });
@@ -519,8 +643,57 @@ export function useAdminData(): AdminDataHook {
       lessons: updatedLessons,
     };
 
-    setAllCourses((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+    setAllCourses((prev) =>
+      prev.map((c) => (c.id === updated.id ? updated : c))
+    );
     await saveCourseToFirebase(updated);
+  };
+
+  // --- NEW FUNCTION: Handle Request Approval ---
+  const handleRequest = async (
+    request: LessonChangeRequest,
+    action: "approve" | "reject"
+  ) => {
+    try {
+      if (action === "reject") {
+        const reqRef = doc(db, "requests", request.id);
+        await updateDoc(reqRef, { status: "rejected" });
+        return;
+      }
+
+      if (action === "approve") {
+        const studentObj = allStudents.find((s) => s.id === request.studentId);
+        if (!studentObj) {
+          alert("Error: Student not found in database.");
+          return;
+        }
+
+        // 1. Remove from OLD lesson
+        await removeStudentFromLesson(
+          request.lesson.courseId,
+          request.lesson.id.toString(),
+          request.studentId
+        );
+
+        // 2. Add to NEW lesson
+        await addStudentToLesson(
+          request.selectedTimeSlot.courseId,
+          request.selectedTimeSlot.lessonId,
+          request.studentId
+        );
+
+        // 3. Mark request as approved
+        const reqRef = doc(db, "requests", request.id);
+        await updateDoc(reqRef, {
+          status: "approved",
+          reviewTime: new Date().toISOString(),
+          reviewNote: "Approved via Admin Panel",
+        });
+      }
+    } catch (error) {
+      console.error("Error processing request:", error);
+      alert("Failed to process request. Check console.");
+    }
   };
 
   return {
@@ -531,6 +704,8 @@ export function useAdminData(): AdminDataHook {
     loading,
     availableCategories,
     availableRounds,
+    requests, // NEW EXPORT
+    handleRequest, // NEW EXPORT
     createCourse,
     deleteCourse,
     enrollStudentToCourse,

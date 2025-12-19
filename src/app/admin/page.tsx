@@ -1,23 +1,25 @@
 // src/app/admin/page.tsx
+
 "use client";
 
-import React, { useState } from "react";
+import { useState } from "react";
 import { useAdminData } from "@/hooks/useAdminData";
 import TimetableTab from "@/components/dashboard/TimetableTab";
 import StudentsTab from "@/components/dashboard/StudentsTab";
 import EnrollmentTab from "@/components/dashboard/EnrollmentTab";
+import RequestsTab from "@/components/dashboard/RequestsTab";
 import PDFTab from "@/components/dashboard/PDFTab";
 import { AdminDataHook } from "@/types";
 
 export default function AdminDashboard() {
   const {
     allCourses,
-    setAllCourses,
     allStudents,
-    setAllStudents,
     loading,
     availableCategories,
     availableRounds,
+    requests,
+    handleRequest,
     createCourse,
     deleteCourse,
     addStudentToLesson,
@@ -27,11 +29,14 @@ export default function AdminDashboard() {
     saveCourseToFirebase,
     enrollStudentToCourse,
     rescheduleStudent,
+    // Add the new updateCourse function here
+    // updateCourse,
   } = useAdminData() as AdminDataHook;
 
   const [activeTab, setActiveTab] = useState<
-    "TIMETABLE" | "STUDENTS" | "ENROLLMENT" | "PDF MANAGER"
+    "TIMETABLE" | "STUDENTS" | "ENROLLMENT" | "PDF MANAGER" | "REQUESTS"
   >("TIMETABLE");
+  const [students, setStudents] = useState(allStudents);
 
   if (loading) {
     return (
@@ -72,6 +77,12 @@ export default function AdminDashboard() {
           >
             PDF Manager
           </button>
+          <button
+            onClick={() => setActiveTab("REQUESTS")}
+            className="cursor-pointer hover:opacity-80 transition"
+          >
+            Requests
+          </button>
         </div>
       </nav>
 
@@ -90,7 +101,8 @@ export default function AdminDashboard() {
           addStudentToLesson={addStudentToLesson}
           removeStudentFromLesson={removeStudentFromLesson}
           toggleLessonCompletion={toggleLessonCompletion}
-          shiftCourseDates={shiftCourseDates}
+          onToggleCompletion={toggleLessonCompletion}
+          onShiftDates={shiftCourseDates}
           saveCourseToFirebase={saveCourseToFirebase}
           rescheduleStudent={rescheduleStudent}
         />
@@ -100,21 +112,23 @@ export default function AdminDashboard() {
         <StudentsTab
           allStudents={allStudents}
           allCourses={allCourses}
-          setAllStudents={setAllStudents}
-          onCourseSave={saveCourseToFirebase}
           rescheduleStudent={rescheduleStudent}
         />
       )}
 
       {activeTab === "ENROLLMENT" && (
         <EnrollmentTab
+          allStudents={allStudents}
           allCourses={allCourses}
-          setAllStudents={setAllStudents}
-          enrollStudentToCourse={enrollStudentToCourse}
+          onEnroll={enrollStudentToCourse}
         />
       )}
 
       {activeTab === "PDF MANAGER" && <PDFTab />}
+
+      {activeTab === "REQUESTS" && (
+        <RequestsTab requests={requests} onHandleRequest={handleRequest} />
+      )}
     </div>
   );
 }

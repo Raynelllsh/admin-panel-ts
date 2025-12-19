@@ -228,7 +228,7 @@ const IconAction = ({
     title={title}
     className="h-9 w-9 grid place-items-center rounded-full text-gray-700 hover:bg-gray-100 hover:text-blue-600 disabled:opacity-50 transition active:scale-95 cursor-pointer"
   >
-    <Icon className={`w-[18px] h-[18px] ${spin ? "animate-spin" : ""}`} />
+    <Icon className={`w-4.5 h-4.5 ${spin ? "animate-spin" : ""}`} />
   </button>
 );
 
@@ -394,7 +394,7 @@ function DocumentRibbon({
       />
 
       {errorMsg && (
-        <div className="hidden md:flex items-center gap-1 text-xs text-red-600 max-w-[260px] overflow-hidden">
+        <div className="hidden md:flex items-center gap-1 text-xs text-red-600 max-w-65 overflow-hidden">
           <FileWarning className="w-4 h-4 shrink-0" />
           <span className="truncate">{errorMsg}</span>
         </div>
@@ -647,7 +647,7 @@ export function DocumentEditor({
                   onClick={onBack}
                   icon={ArrowLeft}
                 />
-                <div className="px-3 text-xs font-medium text-gray-500 whitespace-nowrap min-w-[60px]">
+                <div className="px-3 text-xs font-medium text-gray-500 whitespace-nowrap min-w-15">
                   {status}
                 </div>
                 <div className="h-4 w-px bg-gray-200 mx-1" />
@@ -825,7 +825,7 @@ export function LessonList({
                   {name || "\u00A0"}
                 </span>
 
-                <span className="text-gray-600 whitespace-nowrap text-sm min-h-[1.25rem]">
+                <span className="text-gray-600 whitespace-nowrap text-sm min-h-5">
                   {dateTime ? formatDisplayDate(dateTime) : "—"}
                 </span>
               </div>

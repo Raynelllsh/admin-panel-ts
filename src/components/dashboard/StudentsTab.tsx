@@ -10,9 +10,14 @@ interface StudentsTabProps {
   setAllStudents: React.Dispatch<React.SetStateAction<Student[]>>;
   onCourseSave?: (course: Course) => void; // Optional based on original
   rescheduleStudent: (
-    studentId: string, 
-    oldLesson: { courseId: string; lessonId: string }, 
-    newLesson: { courseId: string; lessonId: string; dateStr: string; timeSlot: string }
+    studentId: string,
+    oldLesson: { courseId: string; lessonId: string },
+    newLesson: {
+      courseId: string;
+      lessonId: string;
+      dateStr: string;
+      timeSlot: string;
+    }
   ) => Promise<{ success: boolean; msg?: string }>;
 }
 
@@ -81,12 +86,17 @@ export default function StudentsTab({
   }, [viewingStudent, allCourses]);
 
   // --- RESCHEDULE LOGIC ---
-  const handleOpenReschedule = (student: Student, currentLesson: StudentLesson) => {
+  const handleOpenReschedule = (
+    student: Student,
+    currentLesson: StudentLesson
+  ) => {
     const options: RescheduleOption[] = [];
 
     allCourses.forEach((c) => {
-      const matchingLesson = c.lessons.find((l) => l.id === currentLesson.lessonId); // Note: using lessonId to match generic lesson index (1-12)
-      
+      const matchingLesson = c.lessons.find(
+        (l) => l.id === currentLesson.lessonId
+      ); // Note: using lessonId to match generic lesson index (1-12)
+
       if (matchingLesson) {
         options.push({
           courseId: c.id,
@@ -180,7 +190,9 @@ export default function StudentsTab({
           <div>
             <h2 className="text-2xl font-bold mb-2">
               {viewingStudent.name}{" "}
-              <span className="text-gray-400 text-sm">({viewingStudent.id})</span>
+              <span className="text-gray-400 text-sm">
+                ({viewingStudent.id})
+              </span>
             </h2>
 
             {viewingStudentEnrollmentGroups.length === 0 && (
@@ -197,7 +209,9 @@ export default function StudentsTab({
                   <thead>
                     <tr className="bg-gray-100">
                       <th className="p-2 text-left">#</th>
-                      <th className="p-2 text-left">Date (Click to Reschedule)</th>
+                      <th className="p-2 text-left">
+                        Date (Click to Reschedule)
+                      </th>
                       <th className="p-2 text-left">Time</th>
                       <th className="p-2 text-left">Status</th>
                     </tr>
@@ -208,21 +222,23 @@ export default function StudentsTab({
                         <td className="p-2">L{l.id}</td>
                         <td
                           className="p-2 text-blue-600 cursor-pointer hover:underline"
-                          onClick={() => handleOpenReschedule(viewingStudent, l)}
+                          onClick={() =>
+                            handleOpenReschedule(viewingStudent, l)
+                          }
                         >
-                          {l.dateStr ? l.dateStr.split("-").slice(1).join("-") : "-"}
-                          
+                          {l.dateStr
+                            ? l.dateStr.split("-").slice(1).join("-")
+                            : "-"}
+
                           {/* CHANGED: Check if lesson courseId differs from group courseId */}
                           {l.courseId !== group.courseId && (
-                             <span className="ml-2 text-xs bg-yellow-100 px-1 rounded">
-                               Makeup
-                             </span>
+                            <span className="ml-2 text-xs bg-yellow-100 px-1 rounded">
+                              Makeup
+                            </span>
                           )}
                         </td>
                         <td className="p-2">{l.timeSlot || "-"}</td>
-                        <td className="p-2">
-                          {l.completed ? "✅" : "⏳"}
-                        </td>
+                        <td className="p-2">{l.completed ? "✅" : "⏳"}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -245,7 +261,11 @@ export default function StudentsTab({
               Reschedule Lesson {reschedulingLesson.lesson.id}
             </h3>
             <p className="mb-4">
-              Current: <span className="font-mono">{reschedulingLesson.lesson.dateStr}</span> ({reschedulingLesson.lesson.timeSlot})
+              Current:{" "}
+              <span className="font-mono">
+                {reschedulingLesson.lesson.dateStr}
+              </span>{" "}
+              ({reschedulingLesson.lesson.timeSlot})
             </p>
 
             <h4 className="font-semibold mb-2">Available Sessions:</h4>

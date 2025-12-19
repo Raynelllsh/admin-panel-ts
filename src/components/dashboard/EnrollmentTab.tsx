@@ -1,94 +1,130 @@
 // src/components/dashboard/EnrollmentTab.tsx
 "use client";
 
-import React, { useState, useMemo, FormEvent } from "react";
+import React, { useState, FormEvent, useEffect } from "react";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { db } from "@/firebase";
 import { Course, Student, PersonalInfo } from "@/types";
 
 interface EnrollmentTabProps {
+  allStudents: Student[];
   allCourses: Course[];
-  setAllStudents: React.Dispatch<React.SetStateAction<Student[]>>;
-  enrollStudentToCourse: (
+  // If you are using local state update for students in parent, keep this:
+  setAllStudents?: React.Dispatch<React.SetStateAction<Student[]>>;
+  onEnroll: (
     courseId: string,
     studentId: string
   ) => Promise<{ success: boolean; msg?: string }>;
+  onReschedule?: any; // Keeping for interface compatibility if needed
 }
 
 export default function EnrollmentTab({
+  allStudents,
   allCourses,
   setAllStudents,
-  enrollStudentToCourse,
+  onEnroll,
 }: EnrollmentTabProps) {
   // --- FORM STATE ---
-  // Identity
-  const [enrollId, setEnrollId] = useState<string>("");
-  const [enrollName, setEnrollName] = useState<string>("");
-  const [enrollChiName, setEnrollChiName] = useState<string>("");
-  const [enrollSex, setEnrollSex] = useState<string>("M");
-  const [enrollLevel, setEnrollLevel] = useState<string>("K3");
-  const [enrollLang, setEnrollLang] = useState<string>("Cantonese");
 
-  // Personal / Medical
-  const [enrollCondition, setEnrollCondition] = useState<string>("");
-  const [enrollAllergies, setEnrollAllergies] = useState<string>("NIL");
-  const [enrollFavChar, setEnrollFavChar] = useState<string>("");
-  const [enrollComfort, setEnrollComfort] = useState<string>("");
+  // 1. Identification
+  const [enrollId, setEnrollId] = useState("");
+  const [isExistingStudent, setIsExistingStudent] = useState(false);
 
-  // Parent Info
-  const [enrollParentName, setEnrollParentName] = useState<string>("");
-  const [enrollParentContact, setEnrollParentContact] = useState<string>("");
+  // 2. New Student Details (Only used if !isExistingStudent)
+  const [enrollName, setEnrollName] = useState("");
+  const [enrollChiName, setEnrollChiName] = useState("");
+  const [enrollSex, setEnrollSex] = useState("M");
+  const [enrollLevel, setEnrollLevel] = useState("K3");
+  const [enrollLang, setEnrollLang] = useState("Cantonese");
 
-  // Course Selection
-  const [enrollCourse, setEnrollCourse] = useState<string>("");
-  const [enrollRound, setEnrollRound] = useState<string>("");
-  const [enrollmentStatus, setEnrollmentStatus] = useState<string>("");
+  // 3. Medical / Personal (Only used if !isExistingStudent)
+  const [enrollCondition, setEnrollCondition] = useState("");
+  const [enrollAllergies, setEnrollAllergies] = useState("NIL");
+  const [enrollFavChar, setEnrollFavChar] = useState("");
+  const [enrollComfort, setEnrollComfort] = useState("");
 
-  // --- DERIVED LISTS ---
-  const availableCourses = useMemo(
-    () => Array.from(new Set(allCourses.map((c) => c.id))).sort(),
-    [allCourses]
+  // 4. Parent Info (Only used if !isExistingStudent)
+  const [enrollParentName, setEnrollParentName] = useState("");
+  const [enrollParentContact, setEnrollParentContact] = useState("");
+
+  // 5. Course Selection (Manual Inputs)
+  const [courseInput, setCourseInput] = useState("");
+  const [roundInput, setRoundInput] = useState("");
+
+  // Status
+  const [statusMsg, setStatusMsg] = useState("");
+  const [statusType, setStatusType] = useState<"idle" | "success" | "error">(
+    "idle"
   );
 
-  const availableRoundsForSelectedCourse = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          allCourses
-            .filter((c) => c.id === enrollCourse)
-            .map((c) => c.path?.round)
-        )
-      ).sort(),
-    [allCourses, enrollCourse]
-  );
+  // --- EFFECT: Check if student exists when ID changes ---
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!enrollId) {
+        setIsExistingStudent(false);
+        return;
+      }
+      const found = allStudents.find((s) => s.id === enrollId);
+      if (found) {
+        setIsExistingStudent(true);
+        setEnrollName(found.name); // Auto-fill name for display
+      } else {
+        setIsExistingStudent(false);
+        setEnrollName(""); // Clear name to allow input
+      }
+    }, 500); // 500ms debounce
+    return () => clearTimeout(timer);
+  }, [enrollId, allStudents]);
 
   // --- SUBMIT HANDLER ---
-  const handleEnrollStudent = async (e: FormEvent) => {
+  const handleEnroll = async (e: FormEvent) => {
     e.preventDefault();
-    if (!enrollId || !enrollName || !enrollCourse || !enrollRound) return;
+    setStatusMsg("Processing...");
+    setStatusType("idle");
 
-    setEnrollmentStatus("Processing...");
+    if (!enrollId || !courseInput || !roundInput) {
+      setStatusMsg("Missing required fields (ID, Course, Round).");
+      setStatusType("error");
+      return;
+    }
+
+    // 1. Construct Target Course ID
+    // Assumption: System uses "Name + Round" as ID (e.g. "English" + "round001" = "Englishround001")
+    const targetCourseId = courseInput.trim() + roundInput.trim();
+
+    // Verify course exists locally before trying
+    const courseExists = allCourses.some((c) => c.id === targetCourseId);
+    if (!courseExists) {
+      setStatusMsg(
+        `Course not found with ID: ${targetCourseId}. Check Course Name and Round.`
+      );
+      setStatusType("error");
+      return;
+    }
 
     try {
-      const studentRef = doc(db, "students", enrollId);
-      const studentSnap = await getDoc(studentRef);
+      // 2. Create Student if NEW
+      if (!isExistingStudent) {
+        if (!enrollName) {
+          setStatusMsg("Name is required for new students.");
+          setStatusType("error");
+          return;
+        }
 
-      const newPersonalInfo: PersonalInfo = {
-        name: enrollName,
-        chineseName: enrollChiName || "",
-        preferredLanguage: enrollLang,
-        condition: enrollCondition || "",
-        sex: enrollSex,
-        level: enrollLevel,
-        favChar: enrollFavChar || "",
-        allergies: enrollAllergies || "NIL",
-        comfortMethod: enrollComfort || "",
-        parentName: enrollParentName || "",
-        parentContact: enrollParentContact || "",
-      };
+        const newPersonalInfo: PersonalInfo = {
+          name: enrollName,
+          chineseName: enrollChiName,
+          preferredLanguage: enrollLang,
+          condition: enrollCondition,
+          sex: enrollSex,
+          level: enrollLevel,
+          favChar: enrollFavChar,
+          allergies: enrollAllergies,
+          comfortMethod: enrollComfort,
+          parentName: enrollParentName,
+          parentContact: enrollParentContact,
+        };
 
-      // 1. Create Student if not exists
-      if (!studentSnap.exists()) {
         const newStudent: Student = {
           id: enrollId,
           name: enrollName,
@@ -96,291 +132,206 @@ export default function EnrollmentTab({
           enrollment: [],
         };
 
-        await setDoc(studentRef, newStudent);
+        // Save to Firebase
+        await setDoc(doc(db, "students", enrollId), newStudent);
 
-        // Optimistically add to local list
-        setAllStudents((prev) => [...prev, newStudent]);
+        // Update local state if setter provided
+        if (setAllStudents) {
+          setAllStudents((prev) => [...prev, newStudent]);
+        }
       }
 
-      // 2. Enroll in Course (Handles Roster + DB)
-      const result = await enrollStudentToCourse(enrollCourse, enrollId);
+      // 3. Enroll (API Call)
+      const result = await onEnroll(targetCourseId, enrollId);
 
       if (result.success) {
-        setEnrollmentStatus(
-          `Success! ${enrollName} enrolled in ${enrollCourse}.`
+        setStatusMsg(
+          `Successfully enrolled ${enrollName} into ${targetCourseId}`
         );
-        // Reset Form
+        setStatusType("success");
+        // Clear inputs? Maybe keep them for rapid entry, just clear student ID
         setEnrollId("");
         setEnrollName("");
-        setEnrollChiName("");
-        setEnrollCondition("");
-        setEnrollFavChar("");
-        setEnrollAllergies("NIL");
-        setEnrollComfort("");
-        setEnrollParentName("");
-        setEnrollParentContact("");
-        setEnrollCourse("");
-        setEnrollRound("");
+        setIsExistingStudent(false);
       } else {
-        setEnrollmentStatus(`Error: ${result.msg}`);
+        setStatusMsg(`Enrollment Failed: ${result.msg}`);
+        setStatusType("error");
       }
     } catch (err) {
       console.error(err);
-      setEnrollmentStatus("Error enrolling student.");
+      setStatusMsg("An unexpected error occurred.");
+      setStatusType("error");
     }
   };
 
-  // Return JSX (truncated for brevity, logic remains identical)
   return (
-    <div className="p-8">
-      <h2 className="text-2xl font-bold mb-6 text-gray-800 border-b pb-2">
-        Enroll New Student
-      </h2>
+    <div className="mx-auto max-w-4xl space-y-6">
+      <div className="rounded-lg bg-white p-6 shadow">
+        <h2 className="mb-4 text-xl font-bold text-gray-800">
+          Manual Enrollment
+        </h2>
 
-      <form onSubmit={handleEnrollStudent} className="space-y-6">
-        {/* SECTION 1: IDENTITY */}
-        <div>
-          <h3 className="text-md font-semibold text-sky-950 mb-3">
-            Student Identity
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <form onSubmit={handleEnroll} className="space-y-6">
+          {/* --- SECTION 1: IDENTIFIERS --- */}
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Student ID *
+              <label className="mb-1 block text-sm font-semibold text-gray-700">
+                Student ID
               </label>
               <input
-                className="mt-1 block w-full border border-gray-300 rounded-md p-2"
+                type="text"
                 value={enrollId}
                 onChange={(e) => setEnrollId(e.target.value)}
+                className="w-full rounded border p-2 focus:border-blue-500 focus:outline-none"
                 placeholder="e.g. STU001"
                 required
               />
+              {enrollId && (
+                <p
+                  className={`mt-1 text-xs ${
+                    isExistingStudent ? "text-green-600" : "text-amber-600"
+                  }`}
+                >
+                  {isExistingStudent
+                    ? `Found existing: ${enrollName}`
+                    : "New student (will be created)"}
+                </p>
+              )}
             </div>
+
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                English Name *
+              <label className="mb-1 block text-sm font-semibold text-gray-700">
+                Course Name / ID
               </label>
               <input
-                className="mt-1 block w-full border border-gray-300 rounded-md p-2"
-                value={enrollName}
-                onChange={(e) => setEnrollName(e.target.value)}
-                placeholder="Full Name"
+                type="text"
+                value={courseInput}
+                onChange={(e) => setCourseInput(e.target.value)}
+                className="w-full rounded border p-2 focus:border-blue-500 focus:outline-none"
+                placeholder="e.g. English_A"
                 required
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Chinese Name
-              </label>
-              <input
-                className="mt-1 block w-full border border-gray-300 rounded-md p-2"
-                value={enrollChiName}
-                onChange={(e) => setEnrollChiName(e.target.value)}
-                placeholder="Optional"
-              />
-            </div>
-          </div>
 
-          <div className="grid grid-cols-3 md:grid-cols-3 gap-4 mt-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Gender
-              </label>
-              <select
-                className="mt-1 block w-full border border-gray-300 rounded-md p-2"
-                value={enrollSex}
-                onChange={(e) => setEnrollSex(e.target.value)}
-              >
-                <option value="M">Male</option>
-                <option value="F">Female</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Level
-              </label>
-              <select
-                className="mt-1 block w-full border border-gray-300 rounded-md p-2"
-                value={enrollLevel}
-                onChange={(e) => setEnrollLevel(e.target.value)}
-              >
-                <option value="K1">K1</option>
-                <option value="K2">K2</option>
-                <option value="K3">K3</option>
-                <option value="P1">P1</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Language
-              </label>
-              <select
-                className="mt-1 block w-full border border-gray-300 rounded-md p-2"
-                value={enrollLang}
-                onChange={(e) => setEnrollLang(e.target.value)}
-              >
-                <option value="Cantonese">Cantonese</option>
-                <option value="English">English</option>
-                <option value="Mandarin">Mandarin</option>
-              </select>
-            </div>
-          </div>
-        </div>
-
-        {/* SECTION 2: PERSONAL & MEDICAL */}
-        <div>
-          <h3 className="text-md font-semibold text-sky-950 mb-3">
-            Personal & Medical Details
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Allergies
+              <label className="mb-1 block text-sm font-semibold text-gray-700">
+                Round ID
               </label>
               <input
-                className="mt-1 block w-full border border-gray-300 rounded-md p-2"
-                value={enrollAllergies}
-                onChange={(e) => setEnrollAllergies(e.target.value)}
-                placeholder="NIL if none"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Special Conditions
-              </label>
-              <input
-                className="mt-1 block w-full border border-gray-300 rounded-md p-2"
-                value={enrollCondition}
-                onChange={(e) => setEnrollCondition(e.target.value)}
-                placeholder="e.g. ADHD, Mild Autism"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Favorite Character
-              </label>
-              <input
-                className="mt-1 block w-full border border-gray-300 rounded-md p-2"
-                value={enrollFavChar}
-                onChange={(e) => setEnrollFavChar(e.target.value)}
-                placeholder="e.g. Elsa, Spiderman"
-              />
-            </div>
-            <div className="col-span-2">
-              <label className="block text-sm font-medium text-gray-700">
-                Comfort Method
-              </label>
-              <input
-                className="mt-1 block w-full border border-gray-300 rounded-md p-2"
-                value={enrollComfort}
-                onChange={(e) => setEnrollComfort(e.target.value)}
-                placeholder="How to calm them down? (e.g. pat on back, quiet corner)"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* SECTION 3: PARENT INFO */}
-        <div>
-          <h3 className="text-md font-semibold text-sky-950 mb-3">
-            Parent / Guardian Information
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Parent Name
-              </label>
-              <input
-                className="mt-1 block w-full border border-gray-300 rounded-md p-2"
-                value={enrollParentName}
-                onChange={(e) => setEnrollParentName(e.target.value)}
-                placeholder="Parent's Name"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Contact Number
-              </label>
-              <input
-                className="mt-1 block w-full border border-gray-300 rounded-md p-2"
-                value={enrollParentContact}
-                onChange={(e) => setEnrollParentContact(e.target.value)}
-                placeholder="Phone or Email"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* SECTION 4: COURSE SELECTION */}
-        <div className="border-t pt-4 mt-2">
-          <h3 className="text-lg font-bold text-gray-900 mb-4">
-            Select Course
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Course Name
-              </label>
-              <select
-                className="block w-full border border-gray-300 rounded-md p-3 focus:ring-sky-500 focus:border-sky-500"
-                value={enrollCourse}
-                onChange={(e) => {
-                  setEnrollCourse(e.target.value);
-                  setEnrollRound("");
-                }}
+                type="text"
+                value={roundInput}
+                onChange={(e) => setRoundInput(e.target.value)}
+                className="w-full rounded border p-2 focus:border-blue-500 focus:outline-none"
+                placeholder="e.g. round001"
                 required
-              >
-                <option value="">-- Select Course --</option>
-                {availableCourses.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Round / Iteration
-              </label>
-              <select
-                className="block w-full border border-gray-300 rounded-md p-3 focus:ring-sky-500 focus:border-sky-500"
-                value={enrollRound}
-                onChange={(e) => setEnrollRound(e.target.value)}
-                required
-                disabled={!enrollCourse}
-              >
-                <option value="">-- Select Round --</option>
-                {availableRoundsForSelectedCourse.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
+              />
             </div>
           </div>
-        </div>
 
-        {/* SUBMIT BUTTON */}
-        <button
-          type="submit"
-          className="w-full bg-sky-950 text-white font-bold py-3 px-4 rounded-lg hover:opacity-85 transition duration-150 ease-in-out mt-4 cursor-pointer"
-        >
-          Enroll Student
-        </button>
+          {/* --- SECTION 2: NEW STUDENT DETAILS (Conditional) --- */}
+          {!isExistingStudent && enrollId && (
+            <div className="rounded-lg border-2 border-dashed border-amber-200 bg-amber-50 p-4">
+              <h3 className="mb-3 font-semibold text-amber-800">
+                New Student Details
+              </h3>
 
-        {/* STATUS MESSAGE */}
-        {enrollmentStatus && (
-          <div
-            className={`p-4 rounded text-center font-medium ${
-              enrollmentStatus.includes("Success")
-                ? "bg-green-100 text-green-800 border border-green-200"
-                : "bg-red-100 text-red-800 border border-red-200"
-            }`}
-          >
-            {enrollmentStatus}
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                  <label className="block text-xs font-medium text-gray-600">
+                    Full Name *
+                  </label>
+                  <input
+                    type="text"
+                    value={enrollName}
+                    onChange={(e) => setEnrollName(e.target.value)}
+                    className="mt-1 w-full rounded border p-2 text-sm"
+                    placeholder="Student Name"
+                    required={!isExistingStudent}
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600">
+                    Chinese Name
+                  </label>
+                  <input
+                    type="text"
+                    value={enrollChiName}
+                    onChange={(e) => setEnrollChiName(e.target.value)}
+                    className="mt-1 w-full rounded border p-2 text-sm"
+                    placeholder="Optional"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600">
+                    Level
+                  </label>
+                  <select
+                    value={enrollLevel}
+                    onChange={(e) => setEnrollLevel(e.target.value)}
+                    className="mt-1 w-full rounded border p-2 text-sm"
+                  >
+                    <option value="K1">K1</option>
+                    <option value="K2">K2</option>
+                    <option value="K3">K3</option>
+                    <option value="P1">P1</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-600">
+                    Sex
+                  </label>
+                  <select
+                    value={enrollSex}
+                    onChange={(e) => setEnrollSex(e.target.value)}
+                    className="mt-1 w-full rounded border p-2 text-sm"
+                  >
+                    <option value="M">Male</option>
+                    <option value="F">Female</option>
+                  </select>
+                </div>
+                {/* Expand other fields if necessary, kept minimal for "Quick" feel */}
+                <div className="md:col-span-2">
+                  <label className="block text-xs font-medium text-gray-600">
+                    Parent Contact
+                  </label>
+                  <input
+                    type="text"
+                    value={enrollParentContact}
+                    onChange={(e) => setEnrollParentContact(e.target.value)}
+                    className="mt-1 w-full rounded border p-2 text-sm"
+                    placeholder="Phone Number"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* --- SUBMIT --- */}
+          <div className="flex items-center justify-end space-x-4">
+            {statusMsg && (
+              <span
+                className={`text-sm font-medium ${
+                  statusType === "success"
+                    ? "text-green-600"
+                    : statusType === "error"
+                    ? "text-red-600"
+                    : "text-gray-600"
+                }`}
+              >
+                {statusMsg}
+              </span>
+            )}
+            <button
+              type="submit"
+              className="rounded-lg bg-blue-600 px-6 py-2 font-semibold text-white transition hover:bg-blue-700 shadow-sm"
+            >
+              {isExistingStudent
+                ? "Enroll Existing Student"
+                : "Create & Enroll Student"}
+            </button>
           </div>
-        )}
-      </form>
+        </form>
+      </div>
     </div>
   );
 }
