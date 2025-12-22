@@ -11,9 +11,9 @@ import {
   getDocs,
   updateDoc,
   deleteDoc,
-  query, // NEW
-  where, // NEW
-  onSnapshot, // NEW
+  query,
+  where,
+  onSnapshot,
 } from "firebase/firestore";
 import {
   DEFAULT_LESSON_NAMES,
@@ -21,10 +21,9 @@ import {
   getCategoryFromId,
   MAX_STUDENTS,
 } from "@/utils/adminConstants";
-import { Course, Student, Lesson, StudentLesson, AdminDataHook } from "@/types";
+import { Course, Student, Lesson, StudentLesson } from "@/types";
 
 // --- NEW INTERFACE FOR REQUESTS ---
-// (You can move this to @/types/index.ts later if you prefer)
 export interface LessonChangeRequest {
   id: string;
   studentId: string;
@@ -59,7 +58,6 @@ type SyncPayload =
   | { courseId: string; id: string | number };
 
 export function useAdminData() {
-  // Removed explicit return type temporarily to avoid interface errors until you update types.ts
   // --- GLOBAL STATE ---
   const [allCourses, setAllCourses] = useState<Course[]>([]);
   const [allStudents, setAllStudents] = useState<Student[]>([]);
@@ -78,7 +76,7 @@ export function useAdminData() {
       const category = course.path?.category || "Uncategorized";
       // Include 'students' array in the saved data
       const lessonsToSave = course.lessons.map((l) => ({
-        id: l.id,
+        id: String(l.id),
         name: l.name,
         dateStr: l.dateStr,
         completed: l.completed || false,
@@ -122,6 +120,8 @@ export function useAdminData() {
 
       currentArray.forEach((item: any) => {
         const fallbackId = (item.courseName || "") + (item.round || "");
+        const itemCourseName = item.courseName || "";
+
         if (item.lessons && Array.isArray(item.lessons)) {
           flatEnrollment.push(
             ...item.lessons.map((l: any) => ({
@@ -132,6 +132,7 @@ export function useAdminData() {
               timeSlot: l.timeSlot || "",
               completed: l.completed || false,
               courseId: l.courseId || item.courseId || fallbackId,
+              courseName: l.courseName || itemCourseName || "",
             }))
           );
         } else {
@@ -140,6 +141,7 @@ export function useAdminData() {
             id: String(item.id),
             lessonId: String(item.id),
             courseId: item.courseId || item.actualCourseId || fallbackId,
+            courseName: itemCourseName || "",
           });
         }
       });
@@ -152,14 +154,20 @@ export function useAdminData() {
       if (action === "enroll_course") {
         const newLessons = payload as StudentLesson[];
         const newKeys = new Set(newLessons.map((l) => getKey(l)));
+        
         flatEnrollment = flatEnrollment.filter((l) => !newKeys.has(getKey(l)));
         flatEnrollment.push(...newLessons);
+
       } else if (action === "add_lesson") {
         const newLesson = payload as StudentLesson;
+        
+        // UPDATED: Remove ANY existing lesson with the same lessonId (swapping logic)
+        // This prevents a student from being in "Lesson 1" in two different courses simultaneously
         flatEnrollment = flatEnrollment.filter(
-          (l) => getKey(l) !== getKey(newLesson)
+          (l) => l.lessonId !== newLesson.lessonId
         );
         flatEnrollment.push(newLesson);
+
       } else if (action === "remove_lesson") {
         const target = payload as { courseId: string; id: string };
         flatEnrollment = flatEnrollment.filter(
@@ -194,7 +202,6 @@ export function useAdminData() {
       collection(db, "requests"),
       where("status", "==", "pending")
     );
-
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const reqs: LessonChangeRequest[] = [];
       snapshot.forEach((doc) => {
@@ -207,7 +214,6 @@ export function useAdminData() {
       );
       setRequests(reqs);
     });
-
     return () => unsubscribe();
   }, []);
 
@@ -225,9 +231,7 @@ export function useAdminData() {
           const data = snap.data();
           const docId = snap.id;
           const match = docId.match(/(.*)(round\d+)$/);
-          const parsedName = match 
-            ? match[1].replace(/_$/, "") 
-            : docId;
+          const parsedName = match ? match[1].replace(/_$/, "") : docId;
           const parsedRound = match ? match[2] : "round001";
 
           const sanitizedLessons: Lesson[] = (data.lessons || []).map(
@@ -262,8 +266,8 @@ export function useAdminData() {
           const studentId = docSnap.id;
           const studentData = docSnap.data();
           let finalEnrollment: StudentLesson[] = [];
-
           const raw = studentData.enrollment;
+
           if (raw) {
             const list = Array.isArray(raw) ? raw : Object.values(raw);
             list.forEach((item: any) => {
@@ -287,6 +291,7 @@ export function useAdminData() {
                 dateStr: sourceLesson?.dateStr || item.dateStr || "",
                 timeSlot: sourceCourse?.timeSlot || item.timeSlot || "",
                 completed: item.completed || false,
+                courseName: sourceCourse?.name || item.courseName || "",
               });
             });
           }
@@ -324,9 +329,10 @@ export function useAdminData() {
         setAllStudents(loadedStudents);
 
         const uniqueCats = Array.from(
-          new Set(loadedCourses.map((c) => c.path?.category || "Uncategorized"))
+          new Set(
+            loadedCourses.map((c) => c.path?.category || "Uncategorized")
+          )
         ).sort();
-
         const uniqueRounds = Array.from(
           new Set(loadedCourses.map((c) => c.path?.round || "round001"))
         ).sort();
@@ -343,9 +349,9 @@ export function useAdminData() {
     fetchData();
   }, []);
 
-  // --- ACTIONS ---\
+  // --- ACTIONS ---
 
-    const createCourse = async (
+  const createCourse = async (
     name: string,
     time: string,
     date: string,
@@ -360,15 +366,12 @@ export function useAdminData() {
     }));
 
     const category = getCategoryFromId(name);
+
     const roundName = roundNumber.startsWith("round")
       ? roundNumber
       : "round" + String(roundNumber).padStart(3, "0");
 
-    // ▼▼▼ CHANGED LINE ▼▼▼
-    // Was: const compositeId = name + roundName;
-    const compositeId = `${name}_${roundName}`; 
-    // Result: "SPEC_C004_round001"
-    // ▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲▲
+    const compositeId = `${name}_${roundName}`;
 
     const newCourse: Course = {
       id: compositeId,
@@ -378,19 +381,22 @@ export function useAdminData() {
       path: { category, round: roundName },
     };
 
+    // 1. UPDATE LOCAL STATE
     setAllCourses((prev) => [...prev, newCourse]);
 
     if (!availableCategories.includes(category)) {
       setAvailableCategories((prev) => [...prev, category].sort());
     }
+
     if (!availableRounds.includes(roundName)) {
       setAvailableRounds((prev) => [...prev, roundName].sort());
     }
 
+    // 2. SAVE TO FIREBASE (Moved outside the IF blocks)
     await saveCourseToFirebase(newCourse);
+
     return category;
   };
-
 
   const deleteCourse = async (courseId: string) => {
     try {
@@ -410,8 +416,12 @@ export function useAdminData() {
         ({
           completed: false,
           courseId: course.id,
+          courseName: course.name, // Save Course Name
           lessonId: l.id,
           id: l.id,
+          name: l.name, // Save Lesson Name
+          dateStr: l.dateStr, // Save Lesson Date
+          timeSlot: course.timeSlot, // Save Time Slot
         } as StudentLesson)
     );
 
@@ -428,7 +438,6 @@ export function useAdminData() {
     setAllCourses((prev) =>
       prev.map((c) => (c.id === courseId ? updatedCourse : c))
     );
-
     await saveCourseToFirebase(updatedCourse);
     return { success: true };
   };
@@ -448,7 +457,7 @@ export function useAdminData() {
     if (lesson.students.length >= MAX_STUDENTS)
       return { success: false, msg: "Class full" };
 
-    // 2. Strict Check for Existing Student (Robust against string/number mismatches)
+    // 2. Strict Check for Existing Student
     const isAlreadyIn = lesson.students.some(
       (id) => String(id) === String(studentId)
     );
@@ -456,35 +465,70 @@ export function useAdminData() {
       return { success: false, msg: "Already in lesson" };
     }
 
+    // 3. AUTO-SWAP: Check if student is in the SAME lesson but DIFFERENT course
+    const studentObj = allStudents.find((s) => s.id === studentId);
+    let oldCourseToUpdate: Course | null = null;
+
+    if (studentObj) {
+      // Find a lesson with the same lessonId (e.g. "1") but different courseId
+      const conflictingLesson = studentObj.enrollment.find(
+        (enr) => enr.lessonId === lessonId && enr.courseId !== courseId
+      );
+
+      if (conflictingLesson) {
+        // Find the old course to remove the student from
+        const oldCourse = allCourses.find((c) => c.id === conflictingLesson.courseId);
+        if (oldCourse) {
+          oldCourseToUpdate = {
+            ...oldCourse,
+            lessons: oldCourse.lessons.map((l) =>
+              l.id === lessonId
+                ? { ...l, students: l.students.filter((id) => id !== studentId) }
+                : l
+            ),
+          };
+        }
+      }
+    }
+
     const lessonData: StudentLesson = {
       completed: false,
       courseId: course.id,
+      courseName: course.name, // Save Course Name
       lessonId: lesson.id,
       id: lesson.id,
-      // Add other fields if needed for UI consistency (name, dateStr, etc.)
-      name: lesson.name,
-      dateStr: lesson.dateStr,
-      timeSlot: course.timeSlot,
+      name: lesson.name, // Save Lesson Name
+      dateStr: lesson.dateStr, // Save Lesson Date
+      timeSlot: course.timeSlot, // Save Time Slot
     } as StudentLesson;
 
     await syncStudentProfile(studentId, "add_lesson", lessonData);
 
-    // 3. Update Course State with Set to FORCE uniqueness
-    const updatedCourse = {
+    // 4. Update Course State (New Course)
+    const updatedNewCourse = {
       ...course,
       lessons: course.lessons.map((l) =>
         l.id === lessonId
-          ? { ...l, students: Array.from(new Set([...l.students, studentId])) } // <--- CHANGED: Uses Set
+          ? { ...l, students: Array.from(new Set([...l.students, studentId])) }
           : l
       ),
     };
 
+    // Update ALL courses in state (New + potential Old one)
     setAllCourses((prev) =>
-      prev.map((c) => (c.id === courseId ? updatedCourse : c))
+      prev.map((c) => {
+        if (c.id === updatedNewCourse.id) return updatedNewCourse;
+        if (oldCourseToUpdate && c.id === oldCourseToUpdate.id) return oldCourseToUpdate;
+        return c;
+      })
     );
 
-    await saveCourseToFirebase(updatedCourse);
-
+    // 5. Persist
+    await saveCourseToFirebase(updatedNewCourse);
+    if (oldCourseToUpdate) {
+      await saveCourseToFirebase(oldCourseToUpdate);
+    }
+    
     return { success: true };
   };
 
@@ -511,7 +555,6 @@ export function useAdminData() {
     setAllCourses((prev) =>
       prev.map((c) => (c.id === courseId ? updatedCourse : c))
     );
-
     await saveCourseToFirebase(updatedCourse);
   };
 
@@ -534,6 +577,7 @@ export function useAdminData() {
 
     const studentRef = doc(db, "students", studentId);
     const studentSnap = await getDoc(studentRef);
+
     if (!studentSnap.exists())
       return { success: false, msg: "Student not found" };
 
@@ -555,7 +599,6 @@ export function useAdminData() {
     });
 
     await updateDoc(studentRef, { enrollment: updatedEnrollment });
-
     setAllStudents((prev) =>
       prev.map((s) =>
         s.id === studentId ? { ...s, enrollment: updatedEnrollment } : s
@@ -600,7 +643,6 @@ export function useAdminData() {
     if (updatedNewCourse && newCourseId !== oldCourseId) {
       await saveCourseToFirebase(updatedNewCourse);
     }
-
     return { success: true };
   };
 
@@ -633,7 +675,9 @@ export function useAdminData() {
     const course = allCourses.find((c) => c.id === courseId);
     if (!course) return;
 
-    const startIndex = course.lessons.findIndex((l) => l.id === startLessonId);
+    const startIndex = course.lessons.findIndex(
+      (l) => l.id === startLessonId
+    );
     if (startIndex === -1) return;
 
     const updatedLessons = course.lessons.map((lesson, index) => {
@@ -657,6 +701,72 @@ export function useAdminData() {
     await saveCourseToFirebase(updated);
   };
 
+  // --- NEW HELPER: Find Missing Lessons & Available Slots ---
+  const findMissingLessons = (studentId: string) => {
+    const student = allStudents.find((s) => s.id === studentId);
+    if (!student) return [];
+
+    // 1. Get IDs of lessons the student is currently enrolled in
+    const enrolledLessonIds = new Set(
+      student.enrollment.map((e) => String(e.lessonId))
+    );
+
+    const missingOptions: {
+      lessonId: string;
+      lessonName: string;
+      availableSlots: {
+        courseId: string;
+        courseName: string;
+        dateStr: string;
+        timeSlot: string;
+        lessonId: string;
+      }[];
+    }[] = [];
+
+    // 2. Iterate through standard lessons
+    DEFAULT_LESSON_NAMES.forEach((name, index) => {
+      const targetId = String(index + 1);
+
+      // If the student does NOT have this lesson ID in their enrollment
+      if (!enrolledLessonIds.has(targetId)) {
+        const slots: typeof missingOptions[0]["availableSlots"] = [];
+
+        // 3. Find all courses that contain this specific lesson
+        allCourses.forEach((course) => {
+          const lesson = course.lessons.find((l) => String(l.id) === targetId);
+
+          if (lesson) {
+            // Check availability
+            const isFull = lesson.students.length >= MAX_STUDENTS;
+            
+            if (!isFull) {
+              slots.push({
+                courseId: course.id,
+                courseName: course.name,
+                dateStr: lesson.dateStr,
+                timeSlot: course.timeSlot,
+                lessonId: targetId,
+              });
+            }
+          }
+        });
+
+        // Sort slots by date (earliest first)
+        slots.sort((a, b) => new Date(a.dateStr).getTime() - new Date(b.dateStr).getTime());
+
+        if (slots.length > 0) {
+          missingOptions.push({
+            lessonId: targetId,
+            lessonName: name,
+            availableSlots: slots,
+          });
+        }
+      }
+    });
+
+    return missingOptions;
+  };
+
   // --- NEW FUNCTION: Handle Request Approval ---
   const handleRequest = async (
     request: LessonChangeRequest,
@@ -670,7 +780,9 @@ export function useAdminData() {
       }
 
       if (action === "approve") {
-        const studentObj = allStudents.find((s) => s.id === request.studentId);
+        const studentObj = allStudents.find(
+          (s) => s.id === request.studentId
+        );
         if (!studentObj) {
           alert("Error: Student not found in database.");
           return;
@@ -712,8 +824,8 @@ export function useAdminData() {
     loading,
     availableCategories,
     availableRounds,
-    requests, // NEW EXPORT
-    handleRequest, // NEW EXPORT
+    requests,
+    handleRequest,
     createCourse,
     deleteCourse,
     enrollStudentToCourse,
@@ -723,5 +835,6 @@ export function useAdminData() {
     shiftCourseDates,
     saveCourseToFirebase,
     rescheduleStudent,
+    findMissingLessons, // Exported for StudentsTab
   };
 }

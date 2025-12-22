@@ -1,4 +1,5 @@
 // src/components/dashboard/StudentsTab.tsx
+
 "use client";
 
 import React, { useMemo, useState } from "react";
@@ -8,6 +9,9 @@ import {
   CalendarClock,
   CheckCircle2,
   Clock3,
+  Info,
+  AlertCircle,
+  Plus,
 } from "lucide-react";
 import { Student, Course, StudentLesson } from "@/types";
 
@@ -26,6 +30,23 @@ interface StudentsTabProps {
       timeSlot: string;
     }
   ) => Promise<{ success: boolean; msg?: string }>;
+  // NEW PROPS
+  addStudentToLesson: (
+    courseId: string,
+    lessonId: string,
+    studentId: string
+  ) => Promise<{ success: boolean; msg?: string }>;
+  findMissingLessons: (studentId: string) => {
+    lessonId: string;
+    lessonName: string;
+    availableSlots: {
+      courseId: string;
+      courseName: string;
+      dateStr: string;
+      timeSlot: string;
+      lessonId: string;
+    }[];
+  }[];
 }
 
 interface EnrollmentGroup {
@@ -46,7 +67,7 @@ interface RescheduleOption {
   path: any;
 }
 
-const cx = (...classes: Array<string | false | null | undefined>) =>
+const cx = (...classes: Array<string | boolean | null | undefined>) =>
   classes.filter(Boolean).join(" ");
 
 function Chip({
@@ -105,16 +126,23 @@ function EmptyState({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
+// Helper to format camelCase keys to Title Case (e.g. "phoneNumber" -> "Phone Number")
+const formatLabel = (key: string) => {
+  const result = key.replace(/([A-Z])/g, " $1");
+  return result.charAt(0).toUpperCase() + result.slice(1);
+};
+
 export default function StudentsTab({
   allStudents,
   allCourses,
   setAllStudents,
   onCourseSave, // kept for compatibility
   rescheduleStudent,
+  addStudentToLesson,
+  findMissingLessons,
 }: StudentsTabProps) {
   const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
-  const [studentSearch, setStudentSearch] = useState<string>("");
-
+  const [studentSearch, setStudentSearch] = useState("");
   const [reschedulingLesson, setReschedulingLesson] = useState<{
     student: Student;
     lesson: StudentLesson;
@@ -124,7 +152,6 @@ export default function StudentsTab({
   const filteredStudents = useMemo(() => {
     const q = studentSearch.trim().toLowerCase();
     if (!q) return allStudents;
-
     return allStudents.filter(
       (s) => s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q)
     );
@@ -153,6 +180,12 @@ export default function StudentsTab({
       a.courseName.localeCompare(b.courseName)
     );
   }, [viewingStudent, allCourses]);
+
+  // NEW: Calculate missing lessons for viewing student
+  const missingLessons = useMemo(() => {
+    if (!viewingStudent || !findMissingLessons) return [];
+    return findMissingLessons(viewingStudent.id);
+  }, [viewingStudent, allCourses]); // Re-calc if courses change
 
   const handleOpenReschedule = (
     student: Student,
@@ -211,15 +244,27 @@ export default function StudentsTab({
     } else {
       alert("Error: " + (res.msg || "Unknown error"));
     }
-
     setReschedulingLesson(null);
   };
 
+  const handleAddMissing = async (courseId: string, lessonId: string) => {
+    if (!viewingStudent) return;
+    const res = await addStudentToLesson(courseId, lessonId, viewingStudent.id);
+    if (res.success) {
+      // Refresh viewing student to show new enrollment
+      const updated = allStudents.find((s) => s.id === viewingStudent.id);
+      if (updated) setViewingStudent(updated);
+    } else {
+      alert(res.msg || "Failed to add lesson");
+    }
+  };
+
   const selectedId = viewingStudent?.id ?? null;
+  const personalInfo = (viewingStudent as any)?.personalInfo || null;
 
   return (
     <div className="m-8 h-[calc(100vh-144px)] overflow-hidden flex rounded-xl border border-gray-200 bg-white shadow-sm">
-      {/* LEFT */}
+      {/* LEFT: Student List */}
       <div className="w-[360px] shrink-0 border-r border-gray-200 bg-gray-50">
         <div className="p-4">
           <div className="flex items-center justify-between gap-2">
@@ -228,12 +273,11 @@ export default function StudentsTab({
               {allStudents.length}
             </Chip>
           </div>
-
           <div className="mt-3">
             <IconInput
               value={studentSearch}
               onChange={setStudentSearch}
-              placeholder="Search name or ID…"
+              placeholder="Search name or ID..."
             />
           </div>
         </div>
@@ -270,7 +314,6 @@ export default function StudentsTab({
                           {s.id}
                         </div>
                       </div>
-
                       {active && (
                         <Chip className="bg-sky-100 text-sky-700">Viewing</Chip>
                       )}
@@ -283,7 +326,7 @@ export default function StudentsTab({
         </div>
       </div>
 
-      {/* RIGHT */}
+      {/* RIGHT: Student Details */}
       <div className="flex-1 min-w-0 bg-white overflow-hidden">
         {!viewingStudent ? (
           <EmptyState
@@ -295,31 +338,111 @@ export default function StudentsTab({
             {/* Header */}
             <div className="sticky top-0 z-10 bg-white/85 backdrop-blur border-b border-gray-200">
               <div className="p-5 flex items-start justify-between gap-4">
-                <div className="min-w-0">
+                <div>
                   <div className="flex items-center gap-2 min-w-0">
-                    <div className="text-lg font-semibold text-gray-900 truncate">
+                    <h2 className="text-lg font-semibold text-gray-900 truncate">
                       {viewingStudent.name}
-                    </div>
+                    </h2>
                     <Chip className="bg-gray-100 text-gray-700 font-mono">
                       {viewingStudent.id}
                     </Chip>
                   </div>
-                  <div className="text-xs text-gray-500 mt-1">
+                  <p className="text-xs text-gray-500 mt-1">
                     Click a lesson date to reschedule.
-                  </div>
+                  </p>
                 </div>
-
                 <div className="flex items-center gap-2">
                   <Chip
                     className="bg-gray-100 text-gray-700"
                     title="Enrollments"
                   >
-                    {viewingStudentEnrollmentGroups.length} course(s)
+                    {viewingStudentEnrollmentGroups.length} courses
                   </Chip>
                 </div>
               </div>
             </div>
 
+            {/* Personal Info Section */}
+            <div className="p-6 border-b border-gray-200 bg-gray-50/40">
+              <div className="flex items-center gap-2 mb-4">
+                <Info className="h-4 w-4 text-gray-400" />
+                <h3 className="text-sm font-semibold text-gray-900">
+                  Personal Information
+                </h3>
+              </div>
+              
+              {personalInfo && Object.keys(personalInfo).length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-8">
+                  {Object.entries(personalInfo).map(([key, value]) => {
+                    // Skip 'name' as it's already in the header
+                    if (key === "name") return null;
+                    
+                    const label = formatLabel(key);
+                    const displayValue = 
+                        typeof value === "object" ? JSON.stringify(value) : String(value || "-");
+
+                    return (
+                      <div key={key} className="min-w-0">
+                        <dt className="text-xs font-medium text-gray-500 mb-0.5">
+                          {label}
+                        </dt>
+                        <dd className="text-sm text-gray-900 truncate" title={displayValue}>
+                          {displayValue}
+                        </dd>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="text-sm text-gray-400 italic">
+                  No additional personal information recorded.
+                </div>
+              )}
+            </div>
+
+            {/* NEW: Missing Lessons Section */}
+            {missingLessons.length > 0 && (
+              <div className="p-5 border-b border-gray-200 bg-red-50/30">
+                <div className="flex items-center gap-2 mb-3">
+                  <AlertCircle className="h-4 w-4 text-red-500" />
+                  <h3 className="text-sm font-semibold text-red-900">
+                    Missing Lessons
+                  </h3>
+                </div>
+                <div className="space-y-3">
+                  {missingLessons.map((item) => (
+                    <div
+                      key={item.lessonId}
+                      className="bg-white border border-red-100 rounded-lg p-3 shadow-sm"
+                    >
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div className="text-sm font-medium text-gray-800">
+                          <span className="text-gray-500 font-normal mr-2">
+                            L{item.lessonId}
+                          </span>
+                          {item.lessonName}
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {item.availableSlots.map((slot) => (
+                            <button
+                              key={`${slot.courseId}-${slot.lessonId}`}
+                              onClick={() => handleAddMissing(slot.courseId, slot.lessonId)}
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium bg-red-50 text-red-700 hover:bg-red-100 border border-red-200 transition"
+                              title={`Add to ${slot.courseName}`}
+                            >
+                              <Plus className="h-3 w-3" />
+                              {slot.dateStr} <span className="opacity-75">({slot.timeSlot})</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Enrollments */}
             <div className="p-5">
               {viewingStudentEnrollmentGroups.length === 0 ? (
                 <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
@@ -347,7 +470,6 @@ export default function StudentsTab({
                             {group.round ? group.round : "—"}
                           </div>
                         </div>
-
                         <div className="flex items-center gap-2">
                           <Chip
                             className="bg-gray-100 text-gray-700"
@@ -376,7 +498,6 @@ export default function StudentsTab({
                               </th>
                             </tr>
                           </thead>
-
                           <tbody className="divide-y divide-gray-100">
                             {group.lessons.map((l) => {
                               const isMakeup = l.courseId !== group.courseId;
@@ -392,7 +513,6 @@ export default function StudentsTab({
                                   <td className="py-2.5 px-4 text-gray-700 font-medium">
                                     L{l.id}
                                   </td>
-
                                   <td className="py-2.5 px-4">
                                     <button
                                       type="button"
@@ -420,11 +540,9 @@ export default function StudentsTab({
                                       )}
                                     </button>
                                   </td>
-
                                   <td className="py-2.5 px-4 text-gray-700">
                                     {l.timeSlot || "-"}
                                   </td>
-
                                   <td className="py-2.5 px-4">
                                     {l.completed ? (
                                       <span className="inline-flex items-center gap-2">
@@ -477,13 +595,13 @@ export default function StudentsTab({
                     Current:{" "}
                     <span className="font-mono">
                       {reschedulingLesson.lesson.dateStr || "—"}
-                    </span>{" "}
+                    </span>
+                    {" "}
                     {reschedulingLesson.lesson.timeSlot
                       ? `(${reschedulingLesson.lesson.timeSlot})`
                       : ""}
                   </div>
                 </div>
-
                 <button
                   type="button"
                   className="h-9 px-3 rounded-lg text-sm text-gray-700 hover:bg-gray-900/5 transition active:scale-95 cursor-pointer"
@@ -499,7 +617,6 @@ export default function StudentsTab({
               <div className="text-xs font-semibold text-gray-700 mb-2">
                 Available sessions
               </div>
-
               {reschedulingLesson.options.length === 0 ? (
                 <div className="rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
                   No other courses found for this lesson.
@@ -530,14 +647,12 @@ export default function StudentsTab({
                             {opt.name || "Lesson"} • {opt.label}
                           </div>
                         </div>
-
                         <Chip className="bg-sky-100 text-sky-700">Select</Chip>
                       </div>
                     </button>
                   ))}
                 </div>
               )}
-
               <button
                 type="button"
                 className="mt-4 w-full h-10 rounded-lg border border-gray-200 text-gray-700 hover:bg-gray-50 transition active:scale-[0.99] cursor-pointer"

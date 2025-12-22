@@ -60,6 +60,7 @@ export type FirebaseEnrollmentItem = {
   // New field shown in your doc:
   // e.g. "SPEC_C001round001"
   courseId?: string;
+  courseName?: string;
 };
 
 export type FirebaseStudent = {
@@ -170,6 +171,8 @@ export function mapStudentDocToFormData(
 
   const firstCourseId = lessonsSorted.find((l) => l?.courseId)?.courseId ?? "";
 
+  const firstCourseName = lessonsSorted.find((l) => l?.courseName)?.courseName ?? "";
+
   const mappedLessons = lessonsSorted.map((l) => {
     const dateStr = l?.dateStr ?? "";
     const timeSlot = l?.timeSlot ?? "";
@@ -177,7 +180,7 @@ export function mapStudentDocToFormData(
       id: l?.id ?? undefined,
       name: l?.name ?? "",
       // Old fields no longer exist in the new format:
-      courseName: "", // or resolve via a courseId->courseName mapping elsewhere
+      courseName: l?.courseName ?? "", // or resolve via a courseId->courseName mapping elsewhere
       completed: !!l?.completed,
       timeSlot,
       dateTime: formatLessonDate(dateStr, timeSlot),
@@ -203,7 +206,7 @@ export function mapStudentDocToFormData(
 
     // New reality: only have courseId (so store into courseCode)
     courseCode: firstCourseId as any,
-    courseName: "" as any,
+    courseName: firstCourseName as any,
 
     lessons: mappedLessons as any,
   } as Partial<FormDataType>;

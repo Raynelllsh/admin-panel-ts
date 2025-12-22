@@ -111,7 +111,7 @@ export default function AdminDashboard() {
           removeStudentFromLesson={removeStudentFromLesson}
           toggleLessonCompletion={toggleLessonCompletion}
           onToggleCompletion={toggleLessonCompletion}
-          onShiftDates={shiftCourseDates}
+          shiftCourseDates={shiftCourseDates}
           saveCourseToFirebase={saveCourseToFirebase}
           rescheduleStudent={rescheduleStudent}
         />

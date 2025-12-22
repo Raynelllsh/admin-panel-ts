@@ -300,9 +300,15 @@ export default function TimetableTab({
   const activeLessonIsFull = activeLessonCount >= MAX_STUDENTS;
 
   const availableStudentsForLesson = useMemo(() => {
-    // show all students; optionally you can filter out already enrolled
-    return allStudents;
-  }, [allStudents]);
+    // If no lesson is actively selected, just return all students (or empty)
+    if (!activeLessonData) return allStudents;
+
+    // Get the array of student IDs already enrolled in this specific lesson
+    const enrolledIds = activeLessonData.lesson.students;
+
+    // Filter the global student list to exclude those IDs
+    return allStudents.filter((student) => !enrolledIds.includes(student.id));
+  }, [allStudents, activeLessonData]); 
 
   // --- UI ---
   return (
@@ -420,7 +426,7 @@ export default function TimetableTab({
         <IconInput
           value={courseSearch}
           onChange={setCourseSearch}
-          placeholder="Search course, id, time…"
+          placeholder="Search course, id, time"
         />
 
         <div className="ml-auto flex items-center gap-2">
@@ -448,7 +454,7 @@ export default function TimetableTab({
                     </div>
                     {loading ? (
                       <Chip className="bg-amber-50 text-amber-700 border border-amber-100">
-                        Loading…
+                        Loading
                       </Chip>
                     ) : (
                       <Chip className="bg-gray-100 text-gray-700">12 rows</Chip>
@@ -800,9 +806,9 @@ export default function TimetableTab({
                 </div>
 
                 <div className="text-xs text-gray-500 mt-1">
-                  Lesson {activeLessonData.lesson.id} •{" "}
+                  Lesson {activeLessonData.lesson.id} {" "}
                   <span className="font-mono">
-                    {activeLessonData.lesson.dateStr || "—"}
+                    {activeLessonData.lesson.dateStr || ""}
                   </span>
                 </div>
               </div>
@@ -938,7 +944,7 @@ export default function TimetableTab({
                       value={selectedStudentToAdd}
                       onChange={(e) => setSelectedStudentToAdd(e.target.value)}
                     >
-                      <option value="">Select student…</option>
+                      <option value="">Select student</option>
                       {availableStudentsForLesson.map((s) => (
                         <option key={s.id} value={s.id}>
                           {s.name} ({s.id})
