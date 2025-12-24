@@ -283,19 +283,24 @@ function DocumentRibbon({
 
   const canGenerate = useMemo(() => studentId.trim().length > 0, [studentId]);
 
+// document-editor.tsx
+
   const suggestions = useMemo(() => {
     const q = studentId.trim().toLowerCase();
     const base = studentIdOptions;
-
-    if (!q) return base.slice(0, 10);
+    
+    // OLD: if (!q) return base.slice(0, 10);
+    if (!q) return base; // NEW: Return all options if no search query
 
     const starts = base.filter((id) => id.toLowerCase().startsWith(q));
     const contains = base.filter(
       (id) => !starts.includes(id) && id.toLowerCase().includes(q)
     );
 
-    return [...starts, ...contains].slice(0, 10);
+    // OLD: return [...starts, ...contains].slice(0, 10);
+    return [...starts, ...contains]; // NEW: Return all matches
   }, [studentId, studentIdOptions]);
+
 
   const handleGenerate = async () => {
     const id = studentId.trim();

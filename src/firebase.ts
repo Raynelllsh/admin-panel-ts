@@ -9,7 +9,7 @@ const firebaseConfig = {
   storageBucket: "siuroma-kids.firebasestorage.app",
   messagingSenderId: "1074502236520",
   appId: "1:1074502236520:web:0e5410da16160ac5767edd",
-  measurementId: "G-9DNFVDM21S",
+  measurementId: "G-9DNFVDM21S"
 };
 
 const app = initializeApp(firebaseConfig);

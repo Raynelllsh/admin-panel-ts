@@ -197,13 +197,13 @@ interface EntriesWorkspaceProps {
 const Pill = ({
   children,
   className = "",
-  onWheel,
+  // onWheel removed to allow native scrolling
 }: {
   children: React.ReactNode;
   className?: string;
   onWheel?: (e: React.WheelEvent) => void;
 }) => (
-  <div onWheel={onWheel} className={className}>
+  <div className={className}>
     {children}
   </div>
 );
@@ -460,11 +460,8 @@ function FileExplorer({
 }: FileExplorerProps) {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [search, setSearch] = useState("");
-  const scrollRef = useRef<HTMLDivElement>(null);
-
-  const forwardWheelToScroll = (e: React.WheelEvent) => {
-    scrollRef.current?.scrollBy({ top: e.deltaY, left: e.deltaX });
-  };
+  // scrollRef removed as it is not needed for native scrolling
+  // forwardWheelToScroll removed
 
   const filteredFiles = useMemo(() => {
     const q = search.toLowerCase();
@@ -484,8 +481,9 @@ function FileExplorer({
   }, [files, search]);
 
   return (
-    <div className="m-8 overflow-hidden">
-      <Pill onWheel={forwardWheelToScroll} className="flex items-center gap-2">
+    // Added h-full, flex, flex-col to parent to constrain height
+    <div className="m-8 overflow-hidden h-full flex flex-col">
+      <Pill className="flex items-center gap-2 flex-shrink-0">
         <button
           onClick={onNewEntry}
           className="px-3 py-2 bg-sky-500 cursor-pointer flex items-center gap-2 rounded-lg text-white hover:opacity-85 transition"
@@ -531,7 +529,8 @@ function FileExplorer({
         </div>
       </Pill>
 
-      <div ref={scrollRef} className="h-full overflow-auto">
+      {/* Added flex-1 to allow this section to grow and fill remaining space, enabling overflow-auto */}
+      <div className="h-full overflow-auto flex-1 custom-scrollbar">
         <div className="py-6">
           {filteredFiles.length === 0 ? (
             <div className="text-center py-20 text-gray-400">
@@ -831,7 +830,8 @@ export function EntriesWorkspace({
     : "This will create a new saved entry.";
 
   return (
-    <div className="overflow-hidden">
+    // Added h-screen and flex-col to root to ensure full height for scrolling
+    <div className="overflow-hidden h-screen flex flex-col">
       {isFilesView || !currentDoc ? (
         <FileExplorer
           files={savedFiles}

@@ -18,20 +18,57 @@ import {
   BookOpen,
   User,
   Smile,
+  ListPlus,
+  Trash2,
+  UserPlus,
+  X,
+  Check,
 } from "lucide-react";
+
+export interface PotentialStudent {
+  id: string;
+  name: string;
+  possibleCourseId: string;
+  lessonInfo: {
+    courseId: string;
+    lessonId: string;
+    name: string;
+    dateStr: string;
+    timeSlot: string;
+  };
+  createdAt: any;
+  status: "potential";
+}
 
 interface EnrollmentTabProps {
   allStudents: Student[];
   allCourses: Course[];
+  potentialStudents?: PotentialStudent[];
   setAllStudents?: React.Dispatch<React.SetStateAction<Student[]>>;
+  
   onEnroll: (
     courseId: string,
     studentId: string
   ) => Promise<{ success: boolean; msg?: string }>;
-  onReschedule?: any;
+  
+  onAddPotential?: (
+    name: string,
+    courseId: string,
+    lessonInfo: any,
+    studentId?: string
+  ) => Promise<{ success: boolean; msg?: string }>;
+  
+  onRemovePotential?: (id: string) => Promise<{ success: boolean; msg?: string }>;
+  
+  onPromotePotential?: (
+    id: string,
+    studentId: string,
+    name: string,
+    courseId: string
+  ) => Promise<{ success: boolean; msg?: string }>;
 }
 
-const cx = (...classes: Array<string | boolean | undefined | null>) =>
+const cx = (...classes: Array<string | false | null | undefined>) =>
   classes.filter(Boolean).join(" ");
 
 const inputClass =
@@ -40,17 +77,25 @@ const inputClass =
 export default function EnrollmentTab({
   allStudents,
   allCourses,
+  potentialStudents = [],
   setAllStudents,
   onEnroll,
+  onAddPotential,
+  onRemovePotential,
+  onPromotePotential,
 }: EnrollmentTabProps) {
   // UI State
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Inputs
   const [studentInput, setStudentInput] = useState("");
-  const [studentNameInput, setStudentNameInput] = useState(""); // New state for Name
+  const [studentNameInput, setStudentNameInput] = useState("");
   const [courseInput, setCourseInput] = useState("");
   const [roundInput, setRoundInput] = useState("");
+
+  // Potential Student Management State
+  const [promoteModeId, setPromoteModeId] = useState<string | null>(null);
+  const [newStudentId, setNewStudentId] = useState("");
 
   // Autocomplete State
   const [isCourseOpen, setIsCourseOpen] = useState(false);
@@ -73,8 +118,12 @@ export default function EnrollmentTab({
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
       if (!courseWrapperRef.current) return;
-      if (!courseWrapperRef.current.contains(e.target as Node))
+      if (
+        !courseWrapperRef.current.contains(e.target as Node) &&
+        (e.target as HTMLElement).id !== "course-input"
+      ) {
         setIsCourseOpen(false);
+      }
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
@@ -101,7 +150,7 @@ export default function EnrollmentTab({
   const resetForm = () => {
     setIsSubmitting(false);
     setStudentInput("");
-    setStudentNameInput(""); // Reset name
+    setStudentNameInput("");
     setCourseInput("");
     setRoundInput("");
     setIsCourseOpen(false);
@@ -120,14 +169,12 @@ export default function EnrollmentTab({
       setStatusType("error");
       return;
     }
+
     if (!studentInput.trim()) {
       setStatusMsg("Student ID is required.");
       setStatusType("error");
       return;
     }
-    // Optional: You can enforce name is required if you want, 
-    // or fallback to ID if empty. Currently allows empty name.
-    // if (!studentNameInput.trim()) { ... }
 
     const targetCourseId = courseInput.trim() + effectiveRound;
     const courseExists = allCourses.some((c) => c.id === targetCourseId);
@@ -148,8 +195,7 @@ export default function EnrollmentTab({
 
       // If student doesn't exist, create a new record
       if (!checkSnap.exists()) {
-        const displayName = studentNameInput.trim() || finalId; // Use Name or fallback to ID
-
+        const displayName = studentNameInput.trim() || finalId;
         const newPersonalInfo: PersonalInfo = {
           name: displayName,
           chineseName: "",
@@ -172,12 +218,11 @@ export default function EnrollmentTab({
         };
 
         await setDoc(doc(db, "students", finalId), newStudent);
+
         if (setAllStudents) {
           setAllStudents((prev) => [...prev, newStudent]);
         }
-      } 
-      // Optional: Update name if student exists but we want to overwrite?
-      // For now, we only set name on creation to be safe.
+      }
 
       // Perform enrollment
       const result = await onEnroll(targetCourseId, finalId);
@@ -199,144 +244,336 @@ export default function EnrollmentTab({
     }
   };
 
-  return (
-    <div className="mx-auto w-full max-w-2xl p-6">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">
-          Quick Enrollment
-        </h1>
-        <p className="mt-2 text-sm text-gray-500">
-          Enter Student details and Course ID. If the student ID is new, a profile will be created with the provided Name.
-        </p>
-      </div>
+  // --- HANDLER: Save as Potential ---
+const handleSavePotential = async (e: React.MouseEvent) => {
+  e.preventDefault();
+  if (!onAddPotential) return;
 
-      <form onSubmit={handleEnroll} className="space-y-6">
-        
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-          {/* Student ID Input */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-gray-500">
-              Student ID *
+  const effectiveRound = roundInput.trim();
+  const targetCourseId = courseInput.trim() + effectiveRound;
+  
+  // Existing logic to determine name
+  const nameToSave = studentNameInput.trim() || studentInput.trim();
+
+  if (!targetCourseId || !nameToSave) {
+    setStatusMsg("Name (or Student ID) and Course ID are required for potential list.");
+    setStatusType("error");
+    return;
+  }
+
+  const course = allCourses.find((c) => c.id === targetCourseId);
+  if (!course) {
+    setStatusMsg("Course not found.");
+    setStatusType("error");
+    return;
+  }
+
+  const firstLesson =
+    course.lessons && course.lessons.length > 0 ? course.lessons[0] : null;
+
+  const lessonInfo = firstLesson
+    ? {
+        courseId: course.id,
+        lessonId: firstLesson.id,
+        name: firstLesson.name,
+        dateStr: firstLesson.dateStr,
+        timeSlot: course.timeSlot,
+      }
+    : { courseId: course.id, note: "No lessons defined" };
+
+  setIsSubmitting(true);
+  setStatusMsg("Saving to potential list...");
+
+  try {
+    // CAPTURE THE STUDENT ID INPUT HERE
+    const potentialId = studentInput.trim(); 
+
+    // Pass it as the 4th argument
+    const result = await onAddPotential(nameToSave, targetCourseId, lessonInfo, potentialId);
+
+    if (result.success) {
+      setStatusMsg("Saved to Potential Students!");
+      setStatusType("success");
+      setTimeout(() => {
+        resetForm();
+      }, 1500);
+    } else {
+      setStatusMsg("Error: " + result.msg);
+      setStatusType("error");
+    }
+  } catch (err) {
+    setStatusMsg("Error saving potential student.");
+    setStatusType("error");
+  } finally {
+    setIsSubmitting(false);
+  }
+};
+
+  // --- HANDLER: Promote Potential Student ---
+  const handlePromoteConfirm = async (ps: PotentialStudent) => {
+    if (!newStudentId.trim() || !onPromotePotential) return;
+    try {
+      const res = await onPromotePotential(
+        ps.id,
+        newStudentId.trim(),
+        ps.name,
+        ps.possibleCourseId
+      );
+      if (res.success) {
+        setPromoteModeId(null);
+        setNewStudentId("");
+      } else {
+        alert("Promotion failed: " + res.msg);
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Error promoting student");
+    }
+  };
+
+  const handleRemovePotential = async (id: string) => {
+    if (!onRemovePotential) return;
+    if (confirm("Remove from potential list?")) {
+      await onRemovePotential(id);
+    }
+  };
+
+  return (
+    // UPDATED LAYOUT: Vertical Stack (max-w-3xl for better reading width)
+    <div className="max-w-3xl mx-auto p-6 flex flex-col gap-8">
+      
+      {/* 1. MAIN ENROLLMENT FORM */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="border-b border-gray-200 bg-gray-50/50 px-6 py-4">
+          <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+            <UserPlus className="h-5 w-5 text-sky-500" />
+            Quick Enrollment
+          </h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Enter Student details and Course ID to enroll immediately.
+          </p>
+        </div>
+
+        <form onSubmit={handleEnroll} className="p-6 grid gap-5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                Student ID *
+              </label>
+              <div className="relative">
+                <User className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                <input
+                  value={studentInput}
+                  onChange={(e) => setStudentInput(e.target.value)}
+                  placeholder="e.g. 231201"
+                  className={cx(inputClass, "pl-10 font-mono")}
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+                Student Name
+              </label>
+              <div className="relative">
+                <Smile className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                <input
+                  value={studentNameInput}
+                  onChange={(e) => setStudentNameInput(e.target.value)}
+                  placeholder="e.g. Alice"
+                  className={cx(inputClass, "pl-10")}
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-1.5 relative">
+            <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">
+              Course ID *
             </label>
             <div className="relative">
-              <User className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+              <BookOpen className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
               <input
-                type="text"
-                value={studentInput}
-                onChange={(e) => setStudentInput(e.target.value)}
-                placeholder="e.g. 231201"
+                id="course-input"
+                value={courseInput}
+                onChange={(e) => {
+                  setCourseInput(e.target.value);
+                  setIsCourseOpen(true);
+                }}
+                onFocus={() => setIsCourseOpen(true)}
+                placeholder="e.g. SPEC_C001"
                 className={cx(inputClass, "pl-10 font-mono")}
                 autoComplete="off"
               />
             </div>
+
+            {isCourseOpen && (
+              <div
+                ref={courseWrapperRef}
+                className="absolute left-0 right-0 top-full mt-1 max-h-48 overflow-auto rounded-lg border border-gray-200 bg-white shadow-xl z-50"
+              >
+                {courseSuggestions.length > 0 ? (
+                  courseSuggestions.map((id) => (
+                    <div
+                      key={id}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        pickCourseSuggestion(id);
+                      }}
+                      className="cursor-pointer border-b border-gray-50 px-3 py-2 text-left font-mono text-xs text-gray-700 hover:bg-blue-50"
+                    >
+                      {id}
+                    </div>
+                  ))
+                ) : courseInput ? (
+                  <div className="px-3 py-2 text-xs text-gray-400 italic">
+                    No matches found
+                  </div>
+                ) : null}
+              </div>
+            )}
           </div>
 
-          {/* Student Name Input */}
-          <div className="space-y-2">
-            <label className="text-xs font-bold uppercase tracking-wider text-gray-500">
-              Student Name
-            </label>
-            <div className="relative">
-              <Smile className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-              <input
-                type="text"
-                value={studentNameInput}
-                onChange={(e) => setStudentNameInput(e.target.value)}
-                placeholder="e.g. Alice"
-                className={cx(inputClass, "pl-10")}
-                autoComplete="off"
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Course ID Input */}
-        <div className="space-y-2 relative" ref={courseWrapperRef}>
-          <label className="text-xs font-bold uppercase tracking-wider text-gray-500">
-            Course ID *
-          </label>
-          <div className="relative">
-            <BookOpen className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-            <input
-              type="text"
-              value={courseInput}
-              onChange={(e) => {
-                setCourseInput(e.target.value);
-                setIsCourseOpen(true);
-              }}
-              onFocus={() => setIsCourseOpen(true)}
-              placeholder="e.g. SPEC_C001_round001"
-              className={cx(inputClass, "pl-10 font-mono")}
-              autoComplete="off"
-            />
-          </div>
-          
-          {/* Autocomplete Dropdown */}
-          {isCourseOpen && (
-            <div className="absolute left-0 top-full z-10 mt-1 max-h-60 w-full overflow-auto rounded-lg border border-gray-100 bg-white py-1 shadow-lg">
-              {courseSuggestions.length > 0 ? (
-                courseSuggestions.map((id) => (
-                  <button
-                    key={id}
-                    type="button"
-                    onClick={(e) => {
-                      e.preventDefault();
-                      pickCourseSuggestion(id);
-                    }}
-                    className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors border-b border-gray-100 last:border-0 cursor-pointer font-mono text-gray-700"
-                    title="Pick course"
-                  >
-                    {id}
-                  </button>
-                ))
-              ) : courseInput ? (
-                <div className="px-3 py-2 text-xs text-gray-400 italic">
-                  No matches found
-                </div>
-              ) : null}
+          {statusMsg && (
+            <div
+              className={cx(
+                "rounded-lg px-4 py-3 text-sm flex items-center gap-2",
+                statusChip
+              )}
+            >
+              {statusType === "error" ? (
+                <X className="h-4 w-4" />
+              ) : statusType === "success" ? (
+                <Check className="h-4 w-4" />
+              ) : (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              )}
+              {statusMsg}
             </div>
           )}
+
+          <div className="pt-2 flex flex-col sm:flex-row gap-3">
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="flex-1 h-10 rounded-lg bg-sky-500 text-white font-semibold hover:bg-sky-600 transition active:scale-[0.99] disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              {isSubmitting ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+              {isSubmitting ? "Processing..." : "Enroll Student"}
+            </button>
+
+            {onAddPotential && (
+              <button
+                type="button"
+                onClick={handleSavePotential}
+                disabled={isSubmitting}
+                className="flex-1 h-10 rounded-lg border border-sky-200 text-sky-700 font-semibold hover:bg-sky-50 transition active:scale-[0.99] disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                <ListPlus className="h-4 w-4" />
+                Add to Potential List
+              </button>
+            )}
+          </div>
+        </form>
+      </div>
+
+      {/* 2. POTENTIAL STUDENTS LIST (Now Below the Form) */}
+      <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+        <div className="border-b border-gray-200 bg-amber-50/50 px-6 py-4">
+          <h2 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+            <ListPlus className="h-5 w-5 text-amber-500" />
+            Pending Enrollments ({potentialStudents.length})
+          </h2>
+          <p className="text-sm text-gray-500 mt-1">
+            Students waiting to be assigned an ID and enrolled.
+          </p>
         </div>
 
-        {/* Status Message */}
-        {statusMsg && (
-          <div
-            className={cx(
-              "flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-medium transition-all",
-              statusChip
-            )}
-          >
-            {statusType === "error" ? (
-              <div className="h-2 w-2 rounded-full bg-red-500" />
-            ) : statusType === "success" ? (
-              <CheckCircle2 className="h-4 w-4" />
-            ) : (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            )}
-            {statusMsg}
-          </div>
-        )}
-
-        {/* Submit Button */}
-        <button
-          type="submit"
-          disabled={isSubmitting}
-          className="flex h-12 w-full items-center justify-center gap-2 rounded-xl bg-sky-500 font-semibold text-white shadow-sm transition hover:bg-sky-400 active:scale-[0.99] disabled:opacity-70 disabled:cursor-not-allowed"
-        >
-          {isSubmitting ? (
-            <>
-              <Loader2 className="h-5 w-5 animate-spin" />
-              Processing...
-            </>
+        <div className="p-4 grid gap-3 grid-cols-1 md:grid-cols-2">
+          {potentialStudents.length === 0 ? (
+            <div className="col-span-full text-center py-10 text-gray-400 text-sm">
+              No potential students currently pending.
+            </div>
           ) : (
-            "Enroll Student"
+            potentialStudents.map((ps) => (
+              <div
+                key={ps.id}
+                className="group relative rounded-lg border border-gray-100 bg-white p-4 shadow-sm hover:border-blue-200 hover:shadow-md transition-all"
+              >
+                <div className="flex justify-between items-start mb-3">
+                  <div>
+                    <div className="font-bold text-gray-900">
+                      {ps.name}
+                    </div>
+                    <div className="text-xs text-gray-500 font-mono mt-0.5 bg-gray-100 px-1.5 py-0.5 rounded inline-block">
+                      {ps.possibleCourseId}
+                    </div>
+                  </div>
+                  {promoteModeId !== ps.id && (
+                    <button
+                      onClick={() => handleRemovePotential(ps.id)}
+                      className="text-gray-300 hover:text-red-500 transition-colors p-1.5 hover:bg-red-50 rounded"
+                      title="Remove"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
+                {promoteModeId === ps.id ? (
+                  // PROMOTE MODE: Input for ID
+                  <div className="mt-2 space-y-2 bg-blue-50/50 p-3 rounded-lg border border-blue-100">
+                    <div className="text-[10px] font-semibold text-blue-800 uppercase tracking-wide">
+                      Assign Student ID:
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        value={newStudentId}
+                        onChange={(e) => setNewStudentId(e.target.value)}
+                        placeholder="e.g. 240101"
+                        className="flex-1 min-w-0 rounded border border-blue-200 px-2 py-1.5 text-sm font-mono focus:border-blue-500 focus:outline-none"
+                        autoFocus
+                      />
+                      <button
+                        onClick={() => handlePromoteConfirm(ps)}
+                        className="rounded bg-blue-600 px-3 text-white hover:bg-blue-700 flex items-center justify-center"
+                        title="Confirm Enrollment"
+                      >
+                        <Check className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => {
+                          setPromoteModeId(null);
+                          setNewStudentId("");
+                        }}
+                        className="rounded bg-white px-3 text-gray-500 ring-1 ring-gray-200 hover:bg-gray-100 flex items-center justify-center"
+                        title="Cancel"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  // VIEW MODE: Action Button
+                  <div className="mt-2">
+                    <button
+                      onClick={() => {
+                        setPromoteModeId(ps.id);
+                        setNewStudentId("");
+                      }}
+                      className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-gray-300 bg-gray-50 py-2.5 text-xs font-semibold text-gray-600 transition-colors hover:border-blue-400 hover:bg-blue-50 hover:text-blue-700"
+                    >
+                      <UserPlus className="h-3.5 w-3.5" />
+                      Finalize Enrollment
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))
           )}
-        </button>
-      </form>
-      
-      <div className="mt-8 pt-6 border-t border-gray-100 flex gap-4 text-xs text-gray-400">
-         <div>Total Students: {allStudents.length}</div>
-         <div>Total Courses: {allCourses.length}</div>
+        </div>
       </div>
     </div>
   );

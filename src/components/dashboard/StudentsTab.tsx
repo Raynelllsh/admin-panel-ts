@@ -12,14 +12,30 @@ import {
   Info,
   AlertCircle,
   Plus,
+  Link as LinkIcon,
+  UserPlus,
+  UserCheck,
 } from "lucide-react";
 import { Student, Course, StudentLesson } from "@/types";
+
+// --- INTERFACES ---
+
+export interface PotentialStudent {
+  id: string;
+  name: string;
+  possibleCourseId: string;
+  enrollment: StudentLesson[];
+  createdAt: any;
+  status: "potential";
+}
 
 interface StudentsTabProps {
   allStudents: Student[];
   allCourses: Course[];
+  potentialStudents?: PotentialStudent[]; // Data from Firestore 'potential_students'
   setAllStudents: React.Dispatch<React.SetStateAction<Student[]>>;
-  onCourseSave?: (course: Course) => void;
+  
+  // Enrolled Student Actions
   rescheduleStudent: (
     studentId: string,
     oldLesson: { courseId: string; lessonId: string },
@@ -30,12 +46,25 @@ interface StudentsTabProps {
       timeSlot: string;
     }
   ) => Promise<{ success: boolean; msg?: string }>;
-  // NEW PROPS
+
+  // NEW: Potential Student Actions
+  reschedulePotentialStudent?: (
+    studentId: string,
+    oldLesson: { lessonId: string },
+    newLesson: {
+      courseId: string;
+      lessonId: string;
+      dateStr: string;
+      timeSlot: string;
+    }
+  ) => Promise<{ success: boolean; msg?: string }>;
+
   addStudentToLesson: (
     courseId: string,
     lessonId: string,
     studentId: string
   ) => Promise<{ success: boolean; msg?: string }>;
+
   findMissingLessons: (studentId: string) => {
     lessonId: string;
     lessonName: string;
@@ -47,6 +76,9 @@ interface StudentsTabProps {
       lessonId: string;
     }[];
   }[];
+  
+  // Kept for backward compatibility if needed
+  onCourseSave?: (course: Course) => void;
 }
 
 interface EnrollmentGroup {
@@ -66,6 +98,8 @@ interface RescheduleOption {
   label: string;
   path: any;
 }
+
+// --- HELPERS ---
 
 const cx = (...classes: Array<string | boolean | null | undefined>) =>
   classes.filter(Boolean).join(" ");
@@ -126,21 +160,27 @@ function EmptyState({ title, subtitle }: { title: string; subtitle: string }) {
   );
 }
 
-// Helper to format camelCase keys to Title Case (e.g. "phoneNumber" -> "Phone Number")
 const formatLabel = (key: string) => {
   const result = key.replace(/([A-Z])/g, " $1");
   return result.charAt(0).toUpperCase() + result.slice(1);
 };
 
+// --- COMPONENT ---
+
 export default function StudentsTab({
   allStudents,
   allCourses,
+  potentialStudents = [], 
   setAllStudents,
-  onCourseSave, // kept for compatibility
+  onCourseSave,
   rescheduleStudent,
+  reschedulePotentialStudent, // New function passed from hook
   addStudentToLesson,
   findMissingLessons,
 }: StudentsTabProps) {
+  
+  // STATE
+  const [activeTab, setActiveTab] = useState<"enrolled" | "potential">("enrolled");
   const [viewingStudent, setViewingStudent] = useState<Student | null>(null);
   const [studentSearch, setStudentSearch] = useState("");
   const [reschedulingLesson, setReschedulingLesson] = useState<{
@@ -149,13 +189,40 @@ export default function StudentsTab({
     options: RescheduleOption[];
   } | null>(null);
 
+  // LOGIC: Filter students based on active tab
+  const currentTabStudents = useMemo<Student[]>(() => {
+    if (activeTab === "enrolled") {
+      return allStudents;
+    } else {
+      // READ FROM POTENTIAL DB -> Adapt to Student Interface
+      return potentialStudents.map(p => ({
+        id: p.id,
+        name: p.name,
+        enrollment: p.enrollment || [], 
+        personalInfo: {
+          name: p.name,
+          chineseName: "",
+          preferredLanguage: "Cantonese",
+          sex: "M",
+          level: "Potential",
+          allergies: "NIL",
+          parentContact: "",
+          comfortMethod: "",
+          condition: "",
+          favChar: "",
+          parentName: "",
+        }
+      }));
+    }
+  }, [activeTab, allStudents, potentialStudents]);
+
   const filteredStudents = useMemo(() => {
     const q = studentSearch.trim().toLowerCase();
-    if (!q) return allStudents;
-    return allStudents.filter(
+    if (!q) return currentTabStudents;
+    return currentTabStudents.filter(
       (s) => s.name.toLowerCase().includes(q) || s.id.toLowerCase().includes(q)
     );
-  }, [allStudents, studentSearch]);
+  }, [currentTabStudents, studentSearch]);
 
   const viewingStudentEnrollmentGroups = useMemo<EnrollmentGroup[]>(() => {
     if (!viewingStudent || !viewingStudent.enrollment) return [];
@@ -163,12 +230,15 @@ export default function StudentsTab({
     const groups: Record<string, EnrollmentGroup> = {};
 
     viewingStudent.enrollment.forEach((lesson) => {
+      // Group by courseId. For potential students, courseId might change per lesson if rescheduled,
+      // so this grouping shows the final proposed schedule nicely.
       const key = lesson.courseId;
+      const courseDetails = allCourses.find((c) => c.id === key);
+      
       if (!groups[key]) {
-        const courseDetails = allCourses.find((c) => c.id === key);
         groups[key] = {
           courseId: key,
-          courseName: courseDetails ? courseDetails.name : key,
+          courseName: courseDetails ? courseDetails.name : (lesson.courseName || key),
           round: courseDetails ? courseDetails.path?.round : "",
           lessons: [],
         };
@@ -181,11 +251,13 @@ export default function StudentsTab({
     );
   }, [viewingStudent, allCourses]);
 
-  // NEW: Calculate missing lessons for viewing student
+  // Only calculate missing lessons for enrolled students
   const missingLessons = useMemo(() => {
-    if (!viewingStudent || !findMissingLessons) return [];
+    if (!viewingStudent || !findMissingLessons || activeTab === 'potential') return [];
     return findMissingLessons(viewingStudent.id);
-  }, [viewingStudent, allCourses]); // Re-calc if courses change
+  }, [viewingStudent, allCourses, activeTab]);
+
+  // ACTIONS
 
   const handleOpenReschedule = (
     student: Student,
@@ -195,7 +267,7 @@ export default function StudentsTab({
 
     allCourses.forEach((c) => {
       const matchingLesson = c.lessons.find(
-        (l) => l.id === currentLesson.lessonId
+        (l) => String(l.id) === String(currentLesson.lessonId)
       );
       if (matchingLesson) {
         options.push({
@@ -222,6 +294,7 @@ export default function StudentsTab({
 
   const confirmReschedule = async (targetOption: RescheduleOption) => {
     if (!reschedulingLesson) return;
+    
     const { student, lesson } = reschedulingLesson;
 
     const oldLessonObj = {
@@ -236,22 +309,41 @@ export default function StudentsTab({
       timeSlot: targetOption.timeSlot,
     };
 
-    const res = await rescheduleStudent(student.id, oldLessonObj, newLessonObj);
+    let res;
+
+    // --- LOGIC SPLIT: POTENTIAL VS ENROLLED ---
+    if (activeTab === "potential") {
+       if (!reschedulePotentialStudent) {
+         alert("Error: Reschedule function for potential students is missing. Check parent component.");
+         return;
+       }
+       res = await reschedulePotentialStudent(student.id, { lessonId: lesson.lessonId }, newLessonObj);
+    } else {
+       res = await rescheduleStudent(student.id, oldLessonObj, newLessonObj);
+    }
 
     if (res.success) {
-      const updatedStudent = allStudents.find((s) => s.id === student.id);
-      if (updatedStudent) setViewingStudent(updatedStudent);
+      alert(`${activeTab === 'potential' ? 'Proposal' : 'Lesson'} rescheduled successfully!`);
+      setReschedulingLesson(null);
+      
+      // For enrolled students, we often need to trigger a refresh or let the hook updates propagate.
+      // Since viewingStudent is a local copy from the memo, it should update automatically when props change.
+      if (activeTab === 'enrolled') {
+          // Additional safety: update local viewing student immediately if needed
+          // but React props usually handle this.
+      } else {
+          // For potential, update immediately if possible or wait for parent
+          // The hook update (setPotentialStudents) will trigger a re-render here.
+      }
     } else {
       alert("Error: " + (res.msg || "Unknown error"));
     }
-    setReschedulingLesson(null);
   };
 
   const handleAddMissing = async (courseId: string, lessonId: string) => {
     if (!viewingStudent) return;
     const res = await addStudentToLesson(courseId, lessonId, viewingStudent.id);
     if (res.success) {
-      // Refresh viewing student to show new enrollment
       const updated = allStudents.find((s) => s.id === viewingStudent.id);
       if (updated) setViewingStudent(updated);
     } else {
@@ -265,31 +357,63 @@ export default function StudentsTab({
   return (
     <div className="m-8 h-[calc(100vh-144px)] overflow-hidden flex rounded-xl border border-gray-200 bg-white shadow-sm">
       {/* LEFT: Student List */}
-      <div className="w-[360px] shrink-0 border-r border-gray-200 bg-gray-50">
-        <div className="p-4">
+      <div className="w-[360px] shrink-0 border-r border-gray-200 bg-gray-50 flex flex-col">
+        <div className="p-4 space-y-3">
+          {/* Header */}
           <div className="flex items-center justify-between gap-2">
             <div className="text-sm font-semibold text-gray-900">Students</div>
-            <Chip className="bg-gray-100 text-gray-700" title="Total students">
-              {allStudents.length}
+            <Chip className="bg-gray-100 text-gray-700" title="Count">
+              {filteredStudents.length}
             </Chip>
           </div>
-          <div className="mt-3">
-            <IconInput
-              value={studentSearch}
-              onChange={setStudentSearch}
-              placeholder="Search name or ID..."
-            />
+
+          {/* TAB SWITCHER */}
+          <div className="flex p-1 bg-gray-200/50 rounded-lg">
+            <button
+              onClick={() => { setActiveTab("enrolled"); setViewingStudent(null); }}
+              className={`flex-1 flex items-center justify-center gap-2 py-1.5 text-xs font-medium rounded-md transition-all ${
+                activeTab === "enrolled"
+                  ? "bg-white text-blue-600 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <UserCheck size={14} />
+              Enrolled
+            </button>
+            <button
+              onClick={() => { setActiveTab("potential"); setViewingStudent(null); }}
+              className={`flex-1 flex items-center justify-center gap-2 py-1.5 text-xs font-medium rounded-md transition-all ${
+                activeTab === "potential"
+                  ? "bg-white text-amber-600 shadow-sm"
+                  : "text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <UserPlus size={14} />
+              Potential
+            </button>
           </div>
+
+          {/* Search */}
+          <IconInput
+            value={studentSearch}
+            onChange={setStudentSearch}
+            placeholder={activeTab === 'potential' ? "Search potential..." : "Search name or ID..."}
+          />
         </div>
 
-        <div className="h-[calc(100%-88px)] overflow-auto">
+        {/* List */}
+        <div className="flex-1 overflow-auto">
           {filteredStudents.length === 0 ? (
             <div className="px-4 py-10 text-center text-gray-400">
-              <p className="text-sm">No students found</p>
-              <p className="text-xs mt-1">Try a different keyword.</p>
+              <p className="text-sm">No {activeTab} students found</p>
+              <p className="text-xs mt-1">
+                {activeTab === 'potential' 
+                 ? "Add potential students in Enrollment tab." 
+                 : "Try a different keyword."}
+              </p>
             </div>
           ) : (
-            <div className="px-2 pb-3 pt-1">
+            <div className="px-2 pb-3 pt-1 space-y-0.5">
               {filteredStudents.map((s) => {
                 const active = selectedId === s.id;
                 return (
@@ -301,7 +425,8 @@ export default function StudentsTab({
                       "w-full text-left px-3 py-2 rounded-lg transition cursor-pointer",
                       "hover:bg-white hover:shadow-sm hover:border hover:border-gray-200",
                       "focus:outline-none focus:ring-2 focus:ring-blue-500/15",
-                      active && "bg-white shadow-sm border border-gray-200"
+                      active && "bg-white shadow-sm border border-gray-200",
+                      active && activeTab === 'potential' && "border-amber-200 bg-amber-50/30"
                     )}
                     title="View student"
                   >
@@ -314,9 +439,16 @@ export default function StudentsTab({
                           {s.id}
                         </div>
                       </div>
-                      {active && (
-                        <Chip className="bg-sky-100 text-sky-700">Viewing</Chip>
-                      )}
+                      <div className="flex flex-col items-end gap-1">
+                        {active && (
+                          <Chip className={activeTab === 'potential' ? "bg-amber-100 text-amber-700" : "bg-sky-100 text-sky-700"}>
+                            Viewing
+                          </Chip>
+                        )}
+                        {activeTab === 'potential' && (
+                           <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
+                        )}
+                      </div>
                     </div>
                   </button>
                 );
@@ -326,11 +458,11 @@ export default function StudentsTab({
         </div>
       </div>
 
-      {/* RIGHT: Student Details */}
+      {/* RIGHT: Details */}
       <div className="flex-1 min-w-0 bg-white overflow-hidden">
         {!viewingStudent ? (
           <EmptyState
-            title="Select a student"
+            title={`Select a ${activeTab} student`}
             subtitle="Choose a student on the left to view enrollments."
           />
         ) : (
@@ -343,12 +475,24 @@ export default function StudentsTab({
                     <h2 className="text-lg font-semibold text-gray-900 truncate">
                       {viewingStudent.name}
                     </h2>
-                    <Chip className="bg-gray-100 text-gray-700 font-mono">
-                      {viewingStudent.id}
+                    <Chip className={cx(
+                      "font-mono",
+                      activeTab === 'potential' ? "bg-amber-50 text-amber-700 border border-amber-100" : "bg-gray-100 text-gray-700"
+                    )}>
+                      {activeTab === 'potential' ? "POTENTIAL" : viewingStudent.id}
                     </Chip>
                   </div>
+                  
+                  {activeTab === 'enrolled' && (
+                    <div className="mt-2">
+                      <CopyLinkButton studentId={viewingStudent.id} />
+                    </div>
+                  )}
                   <p className="text-xs text-gray-500 mt-1">
-                    Click a lesson date to reschedule.
+                    {activeTab === 'potential' 
+                      ? "Customizing proposed timetable."
+                      : "Click a lesson date to reschedule."
+                    }
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -362,45 +506,53 @@ export default function StudentsTab({
               </div>
             </div>
 
-            {/* Personal Info Section */}
+            {/* Info Section */}
             <div className="p-6 border-b border-gray-200 bg-gray-50/40">
               <div className="flex items-center gap-2 mb-4">
                 <Info className="h-4 w-4 text-gray-400" />
                 <h3 className="text-sm font-semibold text-gray-900">
-                  Personal Information
+                  {activeTab === 'potential' ? "Student Status" : "Personal Information"}
                 </h3>
               </div>
               
-              {personalInfo && Object.keys(personalInfo).length > 0 ? (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-8">
-                  {Object.entries(personalInfo).map(([key, value]) => {
-                    // Skip 'name' as it's already in the header
-                    if (key === "name") return null;
-                    
-                    const label = formatLabel(key);
-                    const displayValue = 
-                        typeof value === "object" ? JSON.stringify(value) : String(value || "-");
-
-                    return (
-                      <div key={key} className="min-w-0">
-                        <dt className="text-xs font-medium text-gray-500 mb-0.5">
-                          {label}
-                        </dt>
-                        <dd className="text-sm text-gray-900 truncate" title={displayValue}>
-                          {displayValue}
-                        </dd>
-                      </div>
-                    );
-                  })}
-                </div>
+              {activeTab === 'potential' ? (
+                 <div className="text-sm text-gray-600 italic bg-amber-50 p-3 rounded-lg border border-amber-100">
+                    <p><strong>Status:</strong> Potential Student</p>
+                    <p className="mt-1">
+                      You are editing a proposed timetable. Changes here are saved to the potential student record but do not affect course capacity until enrollment.
+                    </p>
+                 </div>
               ) : (
-                <div className="text-sm text-gray-400 italic">
-                  No additional personal information recorded.
-                </div>
+                personalInfo && Object.keys(personalInfo).length > 0 ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-8">
+                    {Object.entries(personalInfo).map(([key, value]) => {
+                      if (key === "name") return null;
+                      
+                      const label = formatLabel(key);
+                      const displayValue = 
+                          typeof value === "object" ? JSON.stringify(value) : String(value || "-");
+
+                      return (
+                        <div key={key} className="min-w-0">
+                          <dt className="text-xs font-medium text-gray-500 mb-0.5">
+                            {label}
+                          </dt>
+                          <dd className="text-sm text-gray-900 truncate" title={displayValue}>
+                            {displayValue}
+                          </dd>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-sm text-gray-400 italic">
+                    No additional personal information recorded.
+                  </div>
+                )
               )}
             </div>
 
-            {/* NEW: Missing Lessons Section */}
+            {/* Missing Lessons (Enrolled Only) */}
             {missingLessons.length > 0 && (
               <div className="p-5 border-b border-gray-200 bg-red-50/30">
                 <div className="flex items-center gap-2 mb-3">
@@ -442,7 +594,7 @@ export default function StudentsTab({
               </div>
             )}
 
-            {/* Enrollments */}
+            {/* Timetable */}
             <div className="p-5">
               {viewingStudentEnrollmentGroups.length === 0 ? (
                 <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-6">
@@ -524,7 +676,7 @@ export default function StudentsTab({
                                       onClick={() =>
                                         handleOpenReschedule(viewingStudent, l)
                                       }
-                                      title="Reschedule"
+                                      title={activeTab === 'potential' ? "Edit Proposal" : "Reschedule"}
                                     >
                                       <CalendarClock className="h-4 w-4" />
                                       <span className="font-medium">
@@ -589,7 +741,8 @@ export default function StudentsTab({
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-sm font-semibold text-gray-900">
-                    Reschedule lesson L{reschedulingLesson.lesson.id}
+                    {activeTab === 'potential' ? "Modify Proposal: " : "Reschedule lesson "} 
+                    L{reschedulingLesson.lesson.id}
                   </div>
                   <div className="text-xs text-gray-500 mt-1">
                     Current:{" "}
@@ -665,5 +818,47 @@ export default function StudentsTab({
         </div>
       )}
     </div>
+  );
+}
+
+// Helper Component: Copy Link Button
+function CopyLinkButton({ studentId }: { studentId: string }) {
+  const [copied, setCopied] = useState(false);
+  const link = `http://192.168.56.1:3000/login?studentId=${studentId}`;
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Failed to copy:", err);
+      prompt("Copy this link:", link);
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className={`
+        flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-full transition-all border
+        ${copied 
+          ? "bg-green-50 text-green-700 border-green-200" 
+          : "bg-white text-gray-600 border-gray-200 hover:border-blue-300 hover:text-blue-600"}
+      `}
+      title="Copy Parent Portal Link"
+    >
+      {copied ? (
+        <>
+          <CheckCircle2 size={14} />
+          <span>Copied</span>
+        </>
+      ) : (
+        <>
+          <LinkIcon size={14} />
+          <span>Copy Link</span>
+        </>
+      )}
+    </button>
   );
 }

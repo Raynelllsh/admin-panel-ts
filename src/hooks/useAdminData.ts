@@ -1,4 +1,5 @@
 // src/hooks/useAdminData.ts
+
 "use client";
 
 import { useState, useEffect } from "react";
@@ -9,11 +10,13 @@ import {
   setDoc,
   getDoc,
   getDocs,
+  addDoc,
   updateDoc,
   deleteDoc,
   query,
   where,
   onSnapshot,
+  Timestamp,
 } from "firebase/firestore";
 import {
   DEFAULT_LESSON_NAMES,
@@ -22,6 +25,16 @@ import {
   MAX_STUDENTS,
 } from "@/utils/adminConstants";
 import { Course, Student, Lesson, StudentLesson } from "@/types";
+
+// --- NEW INTERFACE FOR POTENTIAL STUDENTS ---
+export interface PotentialStudent {
+  id: string;
+  name: string;
+  possibleCourseId: string;
+  enrollment: StudentLesson[]; // Changed to Array to match Student
+  createdAt: any;
+  status: "potential";
+}
 
 // --- NEW INTERFACE FOR REQUESTS ---
 export interface LessonChangeRequest {
@@ -66,6 +79,9 @@ export function useAdminData() {
   // --- NEW STATE: REQUESTS ---
   const [requests, setRequests] = useState<LessonChangeRequest[]>([]);
 
+  // --- NEW STATE: POTENTIAL STUDENTS ---
+  const [potentialStudents, setPotentialStudents] = useState<PotentialStudent[]>([]);
+
   // --- FILTER STATE ---
   const [availableCategories, setAvailableCategories] = useState<string[]>([]);
   const [availableRounds, setAvailableRounds] = useState<string[]>([]);
@@ -73,7 +89,8 @@ export function useAdminData() {
   // --- HELPER: Save Course to DB ---
   const saveCourseToFirebase = async (course: Course) => {
     try {
-      const category = course.path?.category || "Uncategorized";
+      const category = course.id.split("_")[0] || "Uncategorized";
+
       // Include 'students' array in the saved data
       const lessonsToSave = course.lessons.map((l) => ({
         id: String(l.id),
@@ -97,6 +114,66 @@ export function useAdminData() {
     }
   };
 
+  const reschedulePotentialStudent = async (
+    studentId: string,
+    oldLesson: { lessonId: string },
+    newLesson: {
+      courseId: string;
+      lessonId: string;
+      dateStr: string;
+      timeSlot: string;
+    }
+  ) => {
+    try {
+      const studentRef = doc(db, "potential_students", studentId);
+      const studentSnap = await getDoc(studentRef);
+
+      if (!studentSnap.exists()) {
+        return { success: false, msg: "Potential student not found" };
+      }
+
+      const data = studentSnap.data();
+      let updatedEnrollment = data.enrollment || [];
+
+      // Find the target course details to update names if needed
+      const newCourse = allCourses.find((c) => c.id === newLesson.courseId);
+      const newCourseName = newCourse ? newCourse.name : "";
+
+      // Update the specific lesson in the array
+      updatedEnrollment = updatedEnrollment.map((l: any) => {
+        // Match by Lesson ID (e.g. "1", "2")
+        if (String(l.id) === String(oldLesson.lessonId)) {
+          return {
+            ...l,
+            courseId: newLesson.courseId,
+            courseName: newCourseName || l.courseName, // Update course name
+            dateStr: newLesson.dateStr,
+            timeSlot: newLesson.timeSlot,
+            // We do NOT change the 'completed' status
+          };
+        }
+        return l;
+      });
+
+      // Save to Firestore
+      await updateDoc(studentRef, {
+        enrollment: updatedEnrollment,
+      });
+
+      // Update Local State
+      setPotentialStudents((prev) =>
+        prev.map((s) =>
+          s.id === studentId ? { ...s, enrollment: updatedEnrollment } : s
+        )
+      );
+
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error rescheduling potential student:", error);
+      return { success: false, msg: error.message };
+    }
+  };
+
   // --- HELPER: Sync Student Profile ---
   const syncStudentProfile = async (
     studentCode: string,
@@ -106,7 +183,6 @@ export function useAdminData() {
     try {
       const studentRef = doc(db, "students", studentCode);
       const studentSnap = await getDoc(studentRef);
-
       if (!studentSnap.exists()) return;
 
       const data = studentSnap.data();
@@ -154,20 +230,16 @@ export function useAdminData() {
       if (action === "enroll_course") {
         const newLessons = payload as StudentLesson[];
         const newKeys = new Set(newLessons.map((l) => getKey(l)));
-        
         flatEnrollment = flatEnrollment.filter((l) => !newKeys.has(getKey(l)));
         flatEnrollment.push(...newLessons);
-
       } else if (action === "add_lesson") {
         const newLesson = payload as StudentLesson;
-        
         // UPDATED: Remove ANY existing lesson with the same lessonId (swapping logic)
         // This prevents a student from being in "Lesson 1" in two different courses simultaneously
         flatEnrollment = flatEnrollment.filter(
           (l) => l.lessonId !== newLesson.lessonId
         );
         flatEnrollment.push(newLesson);
-
       } else if (action === "remove_lesson") {
         const target = payload as { courseId: string; id: string };
         flatEnrollment = flatEnrollment.filter(
@@ -216,6 +288,82 @@ export function useAdminData() {
     });
     return () => unsubscribe();
   }, []);
+
+  // --- NEW LISTENER: Potential Students (Real-time) ---
+  useEffect(() => {
+    const q = query(collection(db, "potential_students"));
+    const unsub = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        ...doc.data(),
+      })) as PotentialStudent[];
+      setPotentialStudents(data);
+    });
+    return () => unsub();
+  }, []);
+
+  // --- NEW FUNCTION: Add Potential Student ---
+  // src/hooks/useAdminData.ts
+
+const addPotentialStudent = async (
+  name: string,
+  courseId: string,
+  // We keep this argument for backward compatibility, but we won't strictly need it 
+  // if we find the course in allCourses.
+  trialLessonInfo?: any 
+) => {
+  try {
+    // 1. Find the course object to get the full schedule
+    const course = allCourses.find((c) => c.id === courseId);
+
+    let fullEnrollment: any[] = [];
+
+    if (course) {
+      // 2. Extract all 12 lessons from the course
+      fullEnrollment = course.lessons.map((lesson) => ({
+        id: lesson.id,
+        lessonId: lesson.id,
+        name: lesson.name,
+        dateStr: lesson.dateStr,
+        timeSlot: course.timeSlot, // Use course time for all lessons
+        courseId: course.id,
+        courseName: course.name,
+        completed: false,
+      }));
+    } else if (trialLessonInfo) {
+      // Fallback: If course not found (rare), use the single trial lesson info
+      fullEnrollment = [trialLessonInfo];
+    }
+
+    // 3. Save to Firestore with the full enrollment array
+    await addDoc(collection(db, "potential_students"), {
+      name,
+      possibleCourseId: courseId,
+      enrollment: fullEnrollment, // <--- SAVING ALL 12 LESSONS HERE
+      status: "potential",
+      createdAt: Timestamp.now(),
+    });
+
+    return { success: true };
+  } catch (error: any) {
+    console.error("Error adding potential student:", error);
+    return { success: false, msg: error.message };
+  }
+};
+
+
+  // --- NEW FUNCTION: Remove Potential Student ---
+  const removePotentialStudent = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, "potential_students", id));
+      // Optimistic update
+      setPotentialStudents((prev) => prev.filter((s) => s.id !== id));
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error removing potential student:", error);
+      return { success: false, msg: error.message };
+    }
+  };
 
   // --- LOAD INITIAL DATA ---
   useEffect(() => {
@@ -266,8 +414,8 @@ export function useAdminData() {
           const studentId = docSnap.id;
           const studentData = docSnap.data();
           let finalEnrollment: StudentLesson[] = [];
-          const raw = studentData.enrollment;
 
+          const raw = studentData.enrollment;
           if (raw) {
             const list = Array.isArray(raw) ? raw : Object.values(raw);
             list.forEach((item: any) => {
@@ -275,6 +423,7 @@ export function useAdminData() {
                 item.courseId ||
                 item.actualCourseId ||
                 (item.courseName || "") + (item.round || "");
+
               const lId = String(item.id || item.lessonId);
 
               // Hydration: Get details from course definition
@@ -333,6 +482,7 @@ export function useAdminData() {
             loadedCourses.map((c) => c.path?.category || "Uncategorized")
           )
         ).sort();
+
         const uniqueRounds = Array.from(
           new Set(loadedCourses.map((c) => c.path?.round || "round001"))
         ).sort();
@@ -356,7 +506,7 @@ export function useAdminData() {
     time: string,
     date: string,
     roundNumber: string
-  ): Promise<string> => {
+  ): Promise<string | undefined> => {
     const lessons: Lesson[] = Array.from({ length: 12 }, (_, i) => ({
       id: String(i + 1),
       name: DEFAULT_LESSON_NAMES[i],
@@ -366,7 +516,6 @@ export function useAdminData() {
     }));
 
     const category = getCategoryFromId(name);
-
     const roundName = roundNumber.startsWith("round")
       ? roundNumber
       : "round" + String(roundNumber).padStart(3, "0");
@@ -383,18 +532,15 @@ export function useAdminData() {
 
     // 1. UPDATE LOCAL STATE
     setAllCourses((prev) => [...prev, newCourse]);
-
     if (!availableCategories.includes(category)) {
       setAvailableCategories((prev) => [...prev, category].sort());
     }
-
     if (!availableRounds.includes(roundName)) {
       setAvailableRounds((prev) => [...prev, roundName].sort());
     }
 
     // 2. SAVE TO FIREBASE (Moved outside the IF blocks)
     await saveCourseToFirebase(newCourse);
-
     return category;
   };
 
@@ -438,8 +584,59 @@ export function useAdminData() {
     setAllCourses((prev) =>
       prev.map((c) => (c.id === courseId ? updatedCourse : c))
     );
+
     await saveCourseToFirebase(updatedCourse);
     return { success: true };
+  };
+
+  // --- NEW FUNCTION: Promote Potential to Enrolled ---
+  const promotePotentialStudent = async (
+    potentialId: string,
+    targetStudentId: string,
+    name: string,
+    courseId: string
+  ) => {
+    try {
+      // 1. Check/Create Student Profile
+      const studentRef = doc(db, "students", targetStudentId);
+      const studentSnap = await getDoc(studentRef);
+
+      if (!studentSnap.exists()) {
+        const newStudent: Student = {
+          id: targetStudentId,
+          name: name,
+          personalInfo: {
+            name: name,
+            chineseName: "",
+            preferredLanguage: "Cantonese",
+            sex: "M",
+            level: "K1",
+            allergies: "NIL",
+            parentContact: "",
+            comfortMethod: "",
+            condition: "",
+            favChar: "",
+            parentName: "",
+          },
+          enrollment: [],
+        };
+        await setDoc(studentRef, newStudent);
+        setAllStudents((prev) => [...prev, newStudent]);
+      }
+
+      // 2. Enroll in Course (reuse existing logic)
+      const enrollResult = await enrollStudentToCourse(courseId, targetStudentId);
+      if (!enrollResult.success) {
+        throw new Error(enrollResult.msg || "Enrollment failed");
+      }
+
+      // 3. Remove from Potential List
+      await removePotentialStudent(potentialId);
+      return { success: true };
+    } catch (error: any) {
+      console.error("Error promoting student:", error);
+      return { success: false, msg: error.message };
+    }
   };
 
   const addStudentToLesson = async (
@@ -447,17 +644,37 @@ export function useAdminData() {
     lessonId: string,
     studentId: string
   ) => {
+    // 1. Fetch Fresh Course & Student Data
+    // We fetch the student directly to ensure we have their latest enrollment
+    const studentRef = doc(db, "students", studentId);
+    const studentSnap = await getDoc(studentRef);
+    
+    // Safety check: if student doesn't exist in DB
+    if (!studentSnap.exists()) {
+      return { success: false, msg: "Student not found" };
+    }
+
+    const studentData = studentSnap.data();
+    // Normalize enrollment to an array
+    const currentEnrollment = Array.isArray(studentData.enrollment) 
+      ? studentData.enrollment 
+      : Object.values(studentData.enrollment || {});
+
     const course = allCourses.find((c) => c.id === courseId);
     if (!course) return { success: false, msg: "Course not found" };
 
     const lesson = course.lessons.find((l) => l.id === lessonId);
     if (!lesson) return { success: false, msg: "Lesson not found" };
-
     // 1. Check Capacity
     if (lesson.students.length >= MAX_STUDENTS)
       return { success: false, msg: "Class full" };
 
-    // 2. Strict Check for Existing Student
+    // 2. Check Capacity
+    if (lesson.students.length >= MAX_STUDENTS) {
+      return { success: false, msg: "Class full" };
+    }
+
+    // 3. Strict Check for Existing Student in THIS lesson
     const isAlreadyIn = lesson.students.some(
       (id) => String(id) === String(studentId)
     );
@@ -465,46 +682,46 @@ export function useAdminData() {
       return { success: false, msg: "Already in lesson" };
     }
 
-    // 3. AUTO-SWAP: Check if student is in the SAME lesson but DIFFERENT course
-    const studentObj = allStudents.find((s) => s.id === studentId);
+    // 4. AUTO-SWAP: Check if student is in the SAME lesson ID but DIFFERENT course
+    // We use the FRESH 'currentEnrollment' here, not the local state
     let oldCourseToUpdate: Course | null = null;
 
-    if (studentObj) {
-      // Find a lesson with the same lessonId (e.g. "1") but different courseId
-      const conflictingLesson = studentObj.enrollment.find(
-        (enr) => enr.lessonId === lessonId && enr.courseId !== courseId
-      );
+    const conflictingLesson = currentEnrollment.find(
+      (enr: any) => String(enr.lessonId) === String(lessonId) && enr.courseId !== courseId
+    );
 
-      if (conflictingLesson) {
-        // Find the old course to remove the student from
-        const oldCourse = allCourses.find((c) => c.id === conflictingLesson.courseId);
-        if (oldCourse) {
-          oldCourseToUpdate = {
-            ...oldCourse,
-            lessons: oldCourse.lessons.map((l) =>
-              l.id === lessonId
-                ? { ...l, students: l.students.filter((id) => id !== studentId) }
-                : l
-            ),
-          };
-        }
+    if (conflictingLesson) {
+      // Find the old course to remove the student from
+      const oldCourse = allCourses.find((c) => c.id === conflictingLesson.courseId);
+
+      if (oldCourse) {
+        oldCourseToUpdate = {
+          ...oldCourse,
+          lessons: oldCourse.lessons.map((l) =>
+            String(l.id) === String(lessonId)
+              ? { ...l, students: l.students.filter((id) => String(id) !== String(studentId)) }
+              : l
+          ),
+        };
       }
     }
 
+    // 5. Update Student Profile (Sync)
     const lessonData: StudentLesson = {
       completed: false,
       courseId: course.id,
-      courseName: course.name, // Save Course Name
+      courseName: course.name,
       lessonId: lesson.id,
       id: lesson.id,
-      name: lesson.name, // Save Lesson Name
-      dateStr: lesson.dateStr, // Save Lesson Date
-      timeSlot: course.timeSlot, // Save Time Slot
+      name: lesson.name,
+      dateStr: lesson.dateStr,
+      timeSlot: course.timeSlot,
     } as StudentLesson;
 
+    // This handles the student-side removal/addition
     await syncStudentProfile(studentId, "add_lesson", lessonData);
 
-    // 4. Update Course State (New Course)
+    // 6. Update Course State (New Course)
     const updatedNewCourse = {
       ...course,
       lessons: course.lessons.map((l) =>
@@ -514,7 +731,7 @@ export function useAdminData() {
       ),
     };
 
-    // Update ALL courses in state (New + potential Old one)
+    // Update ALL courses in local state (New + potential Old one)
     setAllCourses((prev) =>
       prev.map((c) => {
         if (c.id === updatedNewCourse.id) return updatedNewCourse;
@@ -523,14 +740,15 @@ export function useAdminData() {
       })
     );
 
-    // 5. Persist
+    // 7. Persist to Firebase
     await saveCourseToFirebase(updatedNewCourse);
     if (oldCourseToUpdate) {
       await saveCourseToFirebase(oldCourseToUpdate);
     }
-    
+
     return { success: true };
   };
+
 
   const removeStudentFromLesson = async (
     courseId: string,
@@ -555,6 +773,7 @@ export function useAdminData() {
     setAllCourses((prev) =>
       prev.map((c) => (c.id === courseId ? updatedCourse : c))
     );
+
     await saveCourseToFirebase(updatedCourse);
   };
 
@@ -632,6 +851,7 @@ export function useAdminData() {
         }
 
         const newCourseObj = { ...course, lessons: updatedLessons };
+
         if (course.id === oldCourseId) updatedOldCourse = newCourseObj;
         if (course.id === newCourseId) updatedNewCourse = newCourseObj;
 
@@ -643,6 +863,7 @@ export function useAdminData() {
     if (updatedNewCourse && newCourseId !== oldCourseId) {
       await saveCourseToFirebase(updatedNewCourse);
     }
+
     return { success: true };
   };
 
@@ -664,6 +885,7 @@ export function useAdminData() {
     setAllCourses((prev) =>
       prev.map((c) => (c.id === updated.id ? updated : c))
     );
+
     await saveCourseToFirebase(updated);
   };
 
@@ -678,6 +900,7 @@ export function useAdminData() {
     const startIndex = course.lessons.findIndex(
       (l) => l.id === startLessonId
     );
+
     if (startIndex === -1) return;
 
     const updatedLessons = course.lessons.map((lesson, index) => {
@@ -698,6 +921,7 @@ export function useAdminData() {
     setAllCourses((prev) =>
       prev.map((c) => (c.id === updated.id ? updated : c))
     );
+
     await saveCourseToFirebase(updated);
   };
 
@@ -734,11 +958,9 @@ export function useAdminData() {
         // 3. Find all courses that contain this specific lesson
         allCourses.forEach((course) => {
           const lesson = course.lessons.find((l) => String(l.id) === targetId);
-
           if (lesson) {
             // Check availability
             const isFull = lesson.students.length >= MAX_STUDENTS;
-            
             if (!isFull) {
               slots.push({
                 courseId: course.id,
@@ -783,6 +1005,7 @@ export function useAdminData() {
         const studentObj = allStudents.find(
           (s) => s.id === request.studentId
         );
+
         if (!studentObj) {
           alert("Error: Student not found in database.");
           return;
@@ -819,12 +1042,16 @@ export function useAdminData() {
   return {
     allCourses,
     setAllCourses,
-    allStudents,
+    allStudents, 
     setAllStudents,
     loading,
     availableCategories,
     availableRounds,
     requests,
+    potentialStudents,
+    addPotentialStudent,
+    removePotentialStudent,
+    promotePotentialStudent,
     handleRequest,
     createCourse,
     deleteCourse,
@@ -835,6 +1062,7 @@ export function useAdminData() {
     shiftCourseDates,
     saveCourseToFirebase,
     rescheduleStudent,
-    findMissingLessons, // Exported for StudentsTab
+    findMissingLessons,
+    reschedulePotentialStudent,
   };
 }
